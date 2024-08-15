@@ -14,7 +14,7 @@ class BlockdagResponse(BaseModel):
     difficulty: float = 3870677677777.2
     pastMedianTime: str = "1656455670700"
     virtualParentHashes: List[str] = ["78273854a739e3e379dfd34a262bbe922400d8e360e30e3f31228519a334350a"]
-    pruningPointHash: str = "5d32a9403273a34b6551b84340a1459ddde2ae6ba59a47987a6374340ba41d5d",
+    pruningPointHash: str = ("5d32a9403273a34b6551b84340a1459ddde2ae6ba59a47987a6374340ba41d5d",)
     virtualDaaScore: str = "19989141"
 
 

@@ -1,5 +1,4 @@
 # encoding: utf-8
-import logging
 import os
 from typing import List
 
@@ -23,7 +22,7 @@ IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 class VerboseDataModel(BaseModel):
     hash: str = "18c7afdf8f447ca06adb8b4946dc45f5feb1188c7d177da6094dfbc760eca699"
-    difficulty: float = 4102204523252.94,
+    difficulty: float = (4102204523252.94,)
     selectedParentHash: str = "580f65c8da9d436480817f6bd7c13eecd9223b37f0d34ae42fb17e1e9fda397e"
     transactionIds: List[str] | None = ["533f8314bf772259fe517f53507a79ebe61c8c6a11748d93a0835551233b3311"]
     blueScore: str = "18483232"
@@ -54,6 +53,7 @@ class BlockHeader(BaseModel):
 
 class ExtraModel(BaseModel):
     color: str | None = None
+    miner_address: str | None = None
 
 
 class BlockModel(BaseModel):
@@ -64,68 +64,58 @@ class BlockModel(BaseModel):
 
 
 class BlockResponse(BaseModel):
-    blockHashes: List[str] = ["44edf9bfd32aa154bfad64485882f184372b64bd60565ba121b42fc3cb1238f3",
-                              "18c7afdf8f447ca06adb8b4946dc45f5feb1188c7d177da6094dfbc760eca699",
-                              "9a822351cd293a653f6721afec1646bd1690da7124b5fbe87001711406010604",
-                              "2fda0dad4ec879b4ad02ebb68c757955cab305558998129a7de111ab852e7dcb"]
+    blockHashes: List[str] = [
+        "44edf9bfd32aa154bfad64485882f184372b64bd60565ba121b42fc3cb1238f3",
+        "18c7afdf8f447ca06adb8b4946dc45f5feb1188c7d177da6094dfbc760eca699",
+        "9a822351cd293a653f6721afec1646bd1690da7124b5fbe87001711406010604",
+        "2fda0dad4ec879b4ad02ebb68c757955cab305558998129a7de111ab852e7dcb",
+    ]
     blocks: List[BlockModel] | None
 
 
 @app.get("/blocks/{blockId}", response_model=BlockModel, tags=["Kaspa blocks"])
-async def get_block(response: Response,
-                    blockId: str = Path(regex="[a-f0-9]{64}"),
-                    includeColor: bool = False):
+async def get_block(response: Response, blockId: str = Path(regex="[a-f0-9]{64}"), includeColor: bool = False):
     """
     Get block information for a given block id
     """
-    resp = await kaspad_client.request("getBlockRequest",
-                                       params={
-                                           "hash": blockId,
-                                           "includeTransactions": True
-                                       })
+    resp = await kaspad_client.request("getBlockRequest", params={"hash": blockId, "includeTransactions": True})
     block = None
     if "block" in resp["getBlockResponse"]:
         block = resp["getBlockResponse"]["block"]
         if block and includeColor:
-            block["extra"] = {
-                "color": await get_block_color_from_kaspad(block)
-            }
+            block["extra"] = {"color": await get_block_color_from_kaspad(block)}
     else:
         if IS_SQL_DB_CONFIGURED:
             response.headers["X-Data-Source"] = "Database"
             block = await get_block_from_db(blockId, True)
             if block and includeColor:
-                block["extra"] = {
-                    "color": await get_block_color_from_db(block)
-                }
+                block["extra"] = {"color": await get_block_color_from_db(block)}
 
     add_cache_control_for_block(block, response)
     return block
 
 
 @app.get("/blocks", response_model=BlockResponse, tags=["Kaspa blocks"])
-async def get_blocks(response: Response,
-                     lowHash: str = Query(regex="[a-f0-9]{64}"),
-                     includeBlocks: bool = False,
-                     includeTransactions: bool = False):
+async def get_blocks(
+    response: Response,
+    lowHash: str = Query(regex="[a-f0-9]{64}"),
+    includeBlocks: bool = False,
+    includeTransactions: bool = False,
+):
     """
     Lists block beginning from a low hash (block id).
     """
     response.headers["Cache-Control"] = "public, max-age=3"
 
-    resp = await kaspad_client.request("getBlocksRequest",
-                                       params={
-                                           "lowHash": lowHash,
-                                           "includeBlocks": includeBlocks,
-                                           "includeTransactions": includeTransactions
-                                       })
+    resp = await kaspad_client.request(
+        "getBlocksRequest",
+        params={"lowHash": lowHash, "includeBlocks": includeBlocks, "includeTransactions": includeTransactions},
+    )
     return resp["getBlocksResponse"]
 
 
 @app.get("/blocks-from-bluescore", response_model=List[BlockModel], tags=["Kaspa blocks"])
-async def get_blocks_from_bluescore(response: Response,
-                                    blueScore: int = 43679173,
-                                    includeTransactions: bool = False):
+async def get_blocks_from_bluescore(response: Response, blueScore: int = 43679173, includeTransactions: bool = False):
     """
     Lists block beginning from a low hash (block id)
     """
@@ -161,36 +151,37 @@ async def get_block_color_from_kaspad(block):
     blockId = block["verboseData"]["hash"]
     childrenHashes = block["verboseData"]["childrenHashes"]
     for childId in childrenHashes:
-        resp = await kaspad_client.request(
-            "getBlockRequest",
-            params={
-                "hash": childId,
-                "includeTransactions": False
-            })
+        resp = await kaspad_client.request("getBlockRequest", params={"hash": childId, "includeTransactions": False})
         if "block" in resp["getBlockResponse"]:
             block = resp["getBlockResponse"]["block"]
             if block["verboseData"].get("isChainBlock", False):
                 if blockId in block["verboseData"]["mergeSetBluesHashes"]:
-                    return 'blue'
+                    return "blue"
                 elif blockId in block["verboseData"]["mergeSetRedsHashes"]:
-                    return 'red'
+                    return "red"
     return None
 
 
 async def get_block_color_from_db(block):
     blockId = block["verboseData"]["hash"]
     async with async_session() as s:
-        blocks = (await s.execute(
-            select(Block)
-            .join(ChainBlock, ChainBlock.block_hash == Block.hash)
-            .join(BlockParent, BlockParent.block_hash == ChainBlock.block_hash)
-            .filter(BlockParent.parent_hash == blockId)
-        )).scalars().all()
+        blocks = (
+            (
+                await s.execute(
+                    select(Block)
+                    .join(ChainBlock, ChainBlock.block_hash == Block.hash)
+                    .join(BlockParent, BlockParent.block_hash == ChainBlock.block_hash)
+                    .filter(BlockParent.parent_hash == blockId)
+                )
+            )
+            .scalars()
+            .all()
+        )
         for block in blocks:
             if blockId in block.merge_set_blues_hashes:
-                return 'blue'
+                return "blue"
             elif blockId in block.merge_set_reds_hashes:
-                return 'red'
+                return "red"
     return None
 
 
@@ -208,7 +199,7 @@ def map_block_from_db(block, is_chain_block, parents, children, transaction_ids,
             "blueWork": block.blue_work,
             "parents": [{"parentHashes": parents}],
             "blueScore": block.blue_score,
-            "pruningPoint": block.pruning_point
+            "pruningPoint": block.pruning_point,
         },
         "transactions": transactions,
         "verboseData": {
@@ -220,8 +211,8 @@ def map_block_from_db(block, is_chain_block, parents, children, transaction_ids,
             "childrenHashes": children,
             "mergeSetBluesHashes": block.merge_set_blues_hashes or [],
             "mergeSetRedsHashes": block.merge_set_reds_hashes or [],
-            "isChainBlock": is_chain_block or False
-        }
+            "isChainBlock": is_chain_block or False,
+        },
     }
 
 
@@ -231,7 +222,9 @@ def block_join_query():
         exists().where(ChainBlock.block_hash == Block.hash),
         select(func.array_agg(BlockParent.parent_hash)).where(BlockParent.block_hash == Block.hash).scalar_subquery(),
         select(func.array_agg(BlockParent.block_hash)).where(BlockParent.parent_hash == Block.hash).scalar_subquery(),
-        select(func.array_agg(BlockTransaction.transaction_id)).where(BlockTransaction.block_hash == Block.hash).scalar_subquery(),
+        select(func.array_agg(BlockTransaction.transaction_id))
+        .where(BlockTransaction.block_hash == Block.hash)
+        .scalar_subquery(),
     )
 
 
@@ -253,55 +246,62 @@ async def get_transactions(blockId, transactionIds):
     Get the transactions associated with a block
     """
     async with async_session() as s:
-        transactions = (await s.execute(
-            select(Transaction, Subnetwork)
-            .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
-            .filter(Transaction.transaction_id.in_(transactionIds))
-        )).all()
+        transactions = (
+            await s.execute(
+                select(Transaction, Subnetwork)
+                .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
+                .filter(Transaction.transaction_id.in_(transactionIds))
+            )
+        ).all()
 
-        tx_outputs = (await s.execute(
-            select(TransactionOutput)
-            .where(TransactionOutput.transaction_id.in_(transactionIds))
-        )).scalars().all()
+        tx_outputs = (
+            (await s.execute(select(TransactionOutput).where(TransactionOutput.transaction_id.in_(transactionIds))))
+            .scalars()
+            .all()
+        )
 
-        tx_inputs = (await s.execute(
-            select(TransactionInput)
-            .where(TransactionInput.transaction_id.in_(transactionIds))
-        )).scalars().all()
+        tx_inputs = (
+            (await s.execute(select(TransactionInput).where(TransactionInput.transaction_id.in_(transactionIds))))
+            .scalars()
+            .all()
+        )
 
     tx_list = []
     for tx, sub in transactions:
-        tx_list.append({
-            "inputs": [
-                {
-                    "previousOutpoint": {
-                        "transactionId": tx_inp.previous_outpoint_hash,
-                        "index": tx_inp.previous_outpoint_index
-                    },
-                    "signatureScript": tx_inp.signature_script,
-                    "sigOpCount": tx_inp.sig_op_count
-                }
-                for tx_inp in tx_inputs if tx_inp.transaction_id == tx.transaction_id
-            ],
-            "outputs": [
-                {
-                    "amount": tx_out.amount,
-                    "scriptPublicKey": {
-                        "scriptPublicKey": tx_out.script_public_key
-                    },
-                    "verboseData": {
-                        "scriptPublicKeyType": tx_out.script_public_key_type,
-                        "scriptPublicKeyAddress": tx_out.script_public_key_address
+        tx_list.append(
+            {
+                "inputs": [
+                    {
+                        "previousOutpoint": {
+                            "transactionId": tx_inp.previous_outpoint_hash,
+                            "index": tx_inp.previous_outpoint_index,
+                        },
+                        "signatureScript": tx_inp.signature_script,
+                        "sigOpCount": tx_inp.sig_op_count,
                     }
-                } for tx_out in tx_outputs if tx_out.transaction_id == tx.transaction_id
-            ],
-            "subnetworkId": sub.subnetwork_id,
-            "verboseData": {
-                "transactionId": tx.transaction_id,
-                "hash": tx.hash,
-                "mass": tx.mass,
-                "blockHash": blockId,
-                "blockTime": tx.block_time
+                    for tx_inp in tx_inputs
+                    if tx_inp.transaction_id == tx.transaction_id
+                ],
+                "outputs": [
+                    {
+                        "amount": tx_out.amount,
+                        "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key},
+                        "verboseData": {
+                            "scriptPublicKeyType": tx_out.script_public_key_type,
+                            "scriptPublicKeyAddress": tx_out.script_public_key_address,
+                        },
+                    }
+                    for tx_out in tx_outputs
+                    if tx_out.transaction_id == tx.transaction_id
+                ],
+                "subnetworkId": sub.subnetwork_id,
+                "verboseData": {
+                    "transactionId": tx.transaction_id,
+                    "hash": tx.hash,
+                    "mass": tx.mass,
+                    "blockHash": blockId,
+                    "blockTime": tx.block_time,
+                },
             }
-        })
+        )
     return tx_list

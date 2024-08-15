@@ -13,9 +13,7 @@ async def get(key):
 
 async def set(key, value):
     async with async_session() as s:
-        result = await s.execute(update(KeyValueModel)
-                                 .where(KeyValueModel.key == key)
-                                 .values(value=value))
+        result = await s.execute(update(KeyValueModel).where(KeyValueModel.key == key).values(value=value))
 
         if result.rowcount == 1:
             await s.commit()

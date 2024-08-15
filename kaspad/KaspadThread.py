@@ -13,31 +13,36 @@ from .messages_pb2 import KaspadMessage
 MAX_MESSAGE_LENGTH = 1024 * 1024 * 1024  # 1GB
 
 
-class KaspadCommunicationError(Exception): pass
+class KaspadCommunicationError(Exception):
+    pass
 
 
 # pipenv run python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=. ./protos/rpc.proto ./protos/messages.proto ./protos/p2p.proto
 
+
 class KaspadThread(object):
     def __init__(self, kaspad_host, kaspad_port, async_thread=True):
-
         self.kaspad_host = kaspad_host
         self.kaspad_port = kaspad_port
 
         if async_thread:
-            self.channel = grpc.aio.insecure_channel(f'{kaspad_host}:{kaspad_port}',
-                                                     compression=grpc.Compression.Gzip,
-                                                     options=[
-                                                         ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-                                                         ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
-                                                     ])
+            self.channel = grpc.aio.insecure_channel(
+                f"{kaspad_host}:{kaspad_port}",
+                compression=grpc.Compression.Gzip,
+                options=[
+                    ("grpc.max_send_message_length", MAX_MESSAGE_LENGTH),
+                    ("grpc.max_receive_message_length", MAX_MESSAGE_LENGTH),
+                ],
+            )
         else:
-            self.channel = grpc.insecure_channel(f'{kaspad_host}:{kaspad_port}',
-                                                 compression=grpc.Compression.Gzip,
-                                                 options=[
-                                                     ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-                                                     ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
-                                                 ])
+            self.channel = grpc.insecure_channel(
+                f"{kaspad_host}:{kaspad_port}",
+                compression=grpc.Compression.Gzip,
+                options=[
+                    ("grpc.max_send_message_length", MAX_MESSAGE_LENGTH),
+                    ("grpc.max_receive_message_length", MAX_MESSAGE_LENGTH),
+                ],
+            )
             self.__sync_queue = Queue()
         self.stub = messages_pb2_grpc.RPCStub(self.channel)
 

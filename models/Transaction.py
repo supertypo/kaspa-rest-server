@@ -7,7 +7,7 @@ from models.type_decorators.HexColumn import HexColumn
 
 
 class Transaction(Base):
-    __tablename__ = 'transactions'
+    __tablename__ = "transactions"
     transaction_id = Column(HexColumn, primary_key=True)
     subnetwork_id = Column(SmallInteger)
     hash = Column(HexColumn)
@@ -16,7 +16,7 @@ class Transaction(Base):
 
 
 class TransactionOutput(Base):
-    __tablename__ = 'transactions_outputs'
+    __tablename__ = "transactions_outputs"
     transaction_id = Column(HexColumn, primary_key=True)
     index = Column(SmallInteger, primary_key=True)
     amount = Column(BigInteger)
@@ -29,7 +29,7 @@ class TransactionOutput(Base):
 
 
 class TransactionInput(Base):
-    __tablename__ = 'transactions_inputs'
+    __tablename__ = "transactions_inputs"
     transaction_id = Column(HexColumn, primary_key=True)
     index = Column(SmallInteger, primary_key=True)
     previous_outpoint_hash = Column(HexColumn)

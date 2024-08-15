@@ -34,9 +34,9 @@ async def health_state():
     kaspads = []
 
     async with async_session() as s:
-        last_block_time = (await s.execute(select(Transaction.block_time)
-                                           .limit(1)
-                                           .order_by(Transaction.block_time.desc()))).scalar()
+        last_block_time = (
+            await s.execute(select(Transaction.block_time).limit(1).order_by(Transaction.block_time.desc()))
+        ).scalar()
 
     time_diff = datetime.now() - datetime.fromtimestamp(last_block_time / 1000)
 
@@ -44,14 +44,14 @@ async def health_state():
         raise HTTPException(status_code=500, detail="Transactions not up to date")
 
     for i, kaspad_info in enumerate(kaspad_client.kaspads):
-        kaspads.append({
-            "isSynced": kaspad_info.is_synced,
-            "isUtxoIndexed": kaspad_info.is_utxo_indexed,
-            "p2pId": hashlib.sha256(kaspad_info.p2p_id.encode()).hexdigest(),
-            "kaspadHost": f"KASPAD_HOST_{i + 1}",
-            "serverVersion": kaspad_info.server_version
-        })
+        kaspads.append(
+            {
+                "isSynced": kaspad_info.is_synced,
+                "isUtxoIndexed": kaspad_info.is_utxo_indexed,
+                "p2pId": hashlib.sha256(kaspad_info.p2p_id.encode()).hexdigest(),
+                "kaspadHost": f"KASPAD_HOST_{i + 1}",
+                "serverVersion": kaspad_info.server_version,
+            }
+        )
 
-    return {
-        "kaspadServers": kaspads
-    }
+    return {"kaspadServers": kaspads}
