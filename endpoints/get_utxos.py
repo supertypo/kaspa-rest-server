@@ -1,5 +1,4 @@
 # encoding: utf-8
-import os
 from fastapi import Path, HTTPException
 from pydantic import BaseModel
 from typing import List
@@ -18,7 +17,7 @@ class ScriptPublicKeyModel(BaseModel):
 
 
 class UtxoModel(BaseModel):
-    amount: str = "11501593788",
+    amount: str = ("11501593788",)
     scriptPublicKey: ScriptPublicKeyModel
     blockDaaScore: str = "18867232"
     isCoinbase: bool = False
@@ -31,16 +30,13 @@ class UtxoResponse(BaseModel):
 
 
 @app.get("/addresses/{kaspaAddress}/utxos", response_model=List[UtxoResponse], tags=["Kaspa addresses"])
-async def get_utxos_for_address(kaspaAddress: str = Path(
-    description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}",
-    regex=REGEX_KASPA_ADDRESS)):
+async def get_utxos_for_address(
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+):
     """
     Lists all open utxo for a given kaspa address
     """
-    resp = await kaspad_client.request("getUtxosByAddressesRequest",
-                                       params={
-                                           "addresses": [kaspaAddress]
-                                       }, timeout=120)
+    resp = await kaspad_client.request("getUtxosByAddressesRequest", params={"addresses": [kaspaAddress]}, timeout=120)
     try:
         return (utxo for utxo in resp["getUtxosByAddressesResponse"]["entries"] if utxo["address"] == kaspaAddress)
     except KeyError:

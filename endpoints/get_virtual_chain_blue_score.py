@@ -4,9 +4,7 @@ from pydantic import BaseModel
 
 from server import app, kaspad_client
 
-current_blue_score_data = {
-    "blue_score": 0
-}
+current_blue_score_data = {"blue_score": 0}
 
 
 class BlockdagResponse(BaseModel):

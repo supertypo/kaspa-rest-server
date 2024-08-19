@@ -34,7 +34,7 @@ async def get_kas_market_data():
                 elif resp.status == 429:
                     FLOOD_DETECTED = time.time()
                     if CACHE:
-                        _logger.warning('Using cached value. 429 detected.')
+                        _logger.warning("Using cached value. 429 detected.")
                     _logger.warning("Rate limit exceeded.")
                 else:
                     _logger.error(f"Did not retrieve the market data. Status code {resp.status}")

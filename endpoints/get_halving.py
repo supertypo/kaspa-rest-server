@@ -11,7 +11,7 @@ from server import app, kaspad_client
 
 class HalvingResponse(BaseModel):
     nextHalvingTimestamp: int = 1662837270000
-    nextHalvingDate: str = '2022-09-10 19:38:52 UTC'
+    nextHalvingDate: str = "2022-09-10 19:38:52 UTC"
     nextHalvingAmount: float = 155.123123
 
 
@@ -40,8 +40,9 @@ async def get_halving(field: str | None = None):
         return PlainTextResponse(content=str(next_halving_timestamp))
 
     elif field == "nextHalvingDate":
-        return PlainTextResponse(content=datetime.utcfromtimestamp(next_halving_timestamp)
-                                 .strftime('%Y-%m-%d %H:%M:%S UTC'))
+        return PlainTextResponse(
+            content=datetime.utcfromtimestamp(next_halving_timestamp).strftime("%Y-%m-%d %H:%M:%S UTC")
+        )
 
     elif field == "nextHalvingAmount":
         return PlainTextResponse(content=str(future_reward))
@@ -49,6 +50,6 @@ async def get_halving(field: str | None = None):
     else:
         return {
             "nextHalvingTimestamp": next_halving_timestamp,
-            "nextHalvingDate": datetime.utcfromtimestamp(next_halving_timestamp).strftime('%Y-%m-%d %H:%M:%S UTC'),
-            "nextHalvingAmount": future_reward
+            "nextHalvingDate": datetime.utcfromtimestamp(next_halving_timestamp).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "nextHalvingAmount": future_reward,
         }

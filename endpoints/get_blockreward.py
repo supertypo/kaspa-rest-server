@@ -26,11 +26,7 @@ async def get_blockreward(stringOnly: bool = False):
             break
 
     if not stringOnly:
-        return {
-            "blockreward": reward
-        }
+        return {"blockreward": reward}
 
     else:
         return f"{reward:.2f}"
-
-

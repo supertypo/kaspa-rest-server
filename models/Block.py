@@ -7,7 +7,7 @@ from models.type_decorators.ByteColumn import ByteColumn
 
 
 class Block(Base):
-    __tablename__ = 'blocks'
+    __tablename__ = "blocks"
     hash = Column(HexColumn, primary_key=True)
     accepted_id_merkle_root = Column(HexColumn)
     difficulty = Column(Float)

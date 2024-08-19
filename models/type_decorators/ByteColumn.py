@@ -11,14 +11,14 @@ class ByteColumn(TypeDecorator):
 
     def process_bind_param(self, value, dialect):
         if value is not None:
-            return int(value).to_bytes((int(value).bit_length() + 7) // 8, 'big')
+            return int(value).to_bytes((int(value).bit_length() + 7) // 8, "big")
         return value
 
     def process_result_value(self, value, dialect):
         if value is not None:
             try:
-                return str(int.from_bytes(value, 'big'))
+                return str(int.from_bytes(value, "big"))
             except Exception as e:
                 _logger.error("Error decoding value '%s': %s", value, e)
-                return ''
+                return ""
         return value

@@ -5,6 +5,7 @@ from kaspad.KaspadThread import KaspadThread
 
 # pipenv run python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=. ./protos/rpc.proto ./protos/messages.proto ./protos/p2p.proto
 
+
 class KaspadClient(object):
     def __init__(self, kaspad_host, kaspad_port):
         self.kaspad_host = kaspad_host
@@ -23,7 +24,7 @@ class KaspadClient(object):
             self.p2p_id = info["getInfoResponse"]["p2pId"]
             return info
 
-        except Exception as exc:
+        except Exception:
             return False
 
     async def request(self, command, params=None, timeout=5):

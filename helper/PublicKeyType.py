@@ -1,7 +1,7 @@
-SCRIPT_CLASS_PUB_KEY = 'pubkey'
-SCRIPT_CLASS_PUB_KEY_ECDSA = 'pubkeyecdsa'
-SCRIPT_CLASS_SCRIPT_HASH = 'scripthash'
-SCRIPT_CLASS_NON_STANDARD = 'nonstandard'
+SCRIPT_CLASS_PUB_KEY = "pubkey"
+SCRIPT_CLASS_PUB_KEY_ECDSA = "pubkeyecdsa"
+SCRIPT_CLASS_SCRIPT_HASH = "scripthash"
+SCRIPT_CLASS_NON_STANDARD = "nonstandard"
 
 
 # Get the public_key_type for a public key.
@@ -20,25 +20,23 @@ def get_public_key_type(public_key):
 
 
 def is_pay_to_pubkey(public_key_bytes):
-    if len(public_key_bytes) == 34 and \
-            public_key_bytes[0] == 0x20 and \
-            public_key_bytes[33] == 0xac:
+    if len(public_key_bytes) == 34 and public_key_bytes[0] == 0x20 and public_key_bytes[33] == 0xAC:
         return True
     return False
 
 
 def is_pay_to_pubkey_ecdsa(public_key_bytes):
-    if len(public_key_bytes) == 35 and \
-            public_key_bytes[0] == 0x21 and \
-            public_key_bytes[34] == 0xab:
+    if len(public_key_bytes) == 35 and public_key_bytes[0] == 0x21 and public_key_bytes[34] == 0xAB:
         return True
     return False
 
 
 def is_pay_to_script_hash(public_key_bytes):
-    if len(public_key_bytes) == 35 and \
-            public_key_bytes[0] == 0xaa and \
-            public_key_bytes[1] == 0x20 and \
-            public_key_bytes[34] == 0x87:
+    if (
+        len(public_key_bytes) == 35
+        and public_key_bytes[0] == 0xAA
+        and public_key_bytes[1] == 0x20
+        and public_key_bytes[34] == 0x87
+    ):
         return True
     return False

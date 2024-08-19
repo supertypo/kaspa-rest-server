@@ -49,35 +49,31 @@ class SubmitTransactionResponse(BaseModel):
     error: str | None
 
 
-@app.post("/transactions",
-          tags=["Kaspa transactions"],
-          response_model_exclude_unset=True,
-          responses={200: {"model": SubmitTransactionResponse},
-                       400: {"model": SubmitTransactionResponse}})
+@app.post(
+    "/transactions",
+    tags=["Kaspa transactions"],
+    response_model_exclude_unset=True,
+    responses={200: {"model": SubmitTransactionResponse}, 400: {"model": SubmitTransactionResponse}},
+)
 async def submit_a_new_transaction(body: SubmitTransactionRequest):
     """
     Forwards the body directly to kaspad with the command submitTransactionRequest
     """
-    tx_resp = await kaspad_client.request("submitTransactionRequest",
-                                          params=body.dict())
+    tx_resp = await kaspad_client.request("submitTransactionRequest", params=body.dict())
 
     tx_resp = tx_resp["submitTransactionResponse"]
 
     # if error in response
     if "error" in tx_resp:
-        return JSONResponse(status_code=400,
-                            content={"error": tx_resp["error"].get("message", "")})
+        return JSONResponse(status_code=400, content={"error": tx_resp["error"].get("message", "")})
 
     # if transactionId is in response
     elif "transactionId" in tx_resp:
-        return {
-            "transactionId": tx_resp["transactionId"]
-        }
+        return {"transactionId": tx_resp["transactionId"]}
 
     # something else went wrong
     else:
-        return JSONResponse(status_code=400,
-                            content={"error": str(tx_resp)})
+        return JSONResponse(status_code=400, content={"error": str(tx_resp)})
 
 
 """

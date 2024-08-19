@@ -1,6 +1,6 @@
 import os
 
-NETWORK_TYPE = os.getenv('NETWORK_TYPE', 'mainnet').lower()
+NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 
 match NETWORK_TYPE:
     case "mainnet":
@@ -16,7 +16,7 @@ match NETWORK_TYPE:
         address_prefix = "kaspadev"
         address_example = "kaspadev:qpqz2vxj23kvh0m73ta2jjn2u4cv4tlufqns2eap8mxyyt0rvrxy6ejkful67"
     case _:
-        raise ValueError(f'Network type {NETWORK_TYPE} not supported.')
+        raise ValueError(f"Network type {NETWORK_TYPE} not supported.")
 
 ADDRESS_PREFIX = address_prefix
 ADDRESS_EXAMPLE = address_example

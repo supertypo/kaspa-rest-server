@@ -14,16 +14,12 @@ class BalanceResponse(BaseModel):
 
 @app.get("/addresses/{kaspaAddress}/balance", response_model=BalanceResponse, tags=["Kaspa addresses"])
 async def get_balance_from_kaspa_address(
-        kaspaAddress: str = Path(
-            description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}",
-            regex=REGEX_KASPA_ADDRESS)):
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+):
     """
     Get balance for a given kaspa address
     """
-    resp = await kaspad_client.request("getBalanceByAddressRequest",
-                                       params={
-                                           "address": kaspaAddress
-                                       })
+    resp = await kaspad_client.request("getBalanceByAddressRequest", params={"address": kaspaAddress})
 
     try:
         resp = resp["getBalanceByAddressResponse"]
@@ -40,7 +36,4 @@ async def get_balance_from_kaspa_address(
     except KeyError:
         balance = 0
 
-    return {
-        "address": kaspaAddress,
-        "balance": balance
-    }
+    return {"address": kaspaAddress, "balance": balance}

@@ -7,7 +7,8 @@ from endpoints import mainnet_only
 from helper import get_kas_price, get_kas_market_data
 from server import app
 
-DISABLE_PRICE = os.getenv('DISABLE_PRICE', 'false').lower() == 'true'
+DISABLE_PRICE = os.getenv("DISABLE_PRICE", "false").lower() == "true"
+
 
 class PriceResponse(BaseModel):
     price: float = 0.025235
@@ -26,9 +27,7 @@ async def get_price(stringOnly: bool = False):
     return {"price": price}
 
 
-@app.get("/info/market-data",
-         tags=["Kaspa network info"],
-         include_in_schema=False)
+@app.get("/info/market-data", tags=["Kaspa network info"], include_in_schema=False)
 @mainnet_only
 async def get_market_data():
     """

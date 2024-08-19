@@ -12,7 +12,7 @@ class AddressColumn(TypeDecorator):
 
     def process_bind_param(self, value, dialect):
         if value is not None:
-            return value[len(self.prefix):]
+            return value[len(self.prefix) :]
         return value
 
     def process_result_value(self, value, dialect):
