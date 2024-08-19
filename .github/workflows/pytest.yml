@@ -17,4 +17,4 @@ jobs:
       # Update output format to enable automatic inline annotations.
       - name: Run Pytest
         run: |
-          pytest .
+          poetry run pytest .
