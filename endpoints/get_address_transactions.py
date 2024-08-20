@@ -55,6 +55,7 @@ class PreviousOutpointLookupMode(str, Enum):
     response_model=TransactionForAddressResponse,
     response_model_exclude_unset=True,
     tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True}
 )
 @sql_db_only
 async def get_transactions_for_address(
@@ -107,6 +108,7 @@ async def get_transactions_for_address(
     response_model=List[TxModel],
     response_model_exclude_unset=True,
     tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True}
 )
 @sql_db_only
 async def get_full_transactions_for_address(
@@ -144,6 +146,7 @@ async def get_full_transactions_for_address(
     response_model=List[TxModel],
     response_model_exclude_unset=True,
     tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True}
 )
 @sql_db_only
 async def get_full_transactions_for_address_page(
@@ -203,7 +206,10 @@ async def get_full_transactions_for_address_page(
     return await search_for_transactions(TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints)
 
 
-@app.get("/addresses/{kaspaAddress}/transactions-count", response_model=TransactionCount, tags=["Kaspa addresses"])
+@app.get("/addresses/{kaspaAddress}/transactions-count",
+         response_model=TransactionCount,
+         tags=["Kaspa addresses"],
+         openapi_extra={"strict_query_params": True})
 @sql_db_only
 async def get_transaction_count_for_address(
     kaspaAddress: str = Path(
@@ -222,7 +228,10 @@ async def get_transaction_count_for_address(
     return TransactionCount(total=tx_count.scalar())
 
 
-@app.get("/addresses/{kaspaAddress}/name", response_model=AddressName | None, tags=["Kaspa addresses"])
+@app.get("/addresses/{kaspaAddress}/name",
+         response_model=AddressName | None,
+         tags=["Kaspa addresses"],
+         openapi_extra={"strict_query_params": True})
 @sql_db_only
 async def get_name_for_address(
     response: Response,

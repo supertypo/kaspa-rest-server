@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from dbsession import async_session
+from helper.StrictRoute import StrictRoute
 from helper.LimitUploadSize import LimitUploadSize
 from kaspad.KaspadMultiClient import KaspadMultiClient
 
@@ -27,6 +28,7 @@ app = FastAPI(
     contact={"name": "lAmeR1"},
     license_info={"name": "MIT LICENSE"},
 )
+app.router.route_class = StrictRoute
 
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(LimitUploadSize, max_upload_size=200_000)  # ~1MB
