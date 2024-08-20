@@ -1,4 +1,4 @@
-from helper.mining_address import get_miner_payload_from_block, retrieve_mining_info_from_payload
+from helper.mining_address import get_miner_payload_from_block, retrieve_miner_info_from_payload
 
 
 def test_get_miner_payload_from_block():
@@ -129,6 +129,13 @@ def test_get_miner_payload_from_block():
 
 def test_retrieve_mining_info_from_payload():
     payload = "b9b5220500000000d7ab55270200000000002220cdcb53d7708f03ffa58c989ad41ecd1b91e3f30a34bbd91f593aacdb5e0b2fd8ac302e31342e312f322f302f637878782f"
-    mining_info = retrieve_mining_info_from_payload(payload)
-    assert mining_info["mining_address"] == "kaspa:qrxuk57hwz8s8la93jvf44q7e5derclnpg6thkgltya2ek67pvhasz43zf6ys"
-    assert mining_info["miner_info"] == "0.14.1/2/0/cxxx/"
+    miner_info, mining_address = retrieve_miner_info_from_payload(payload)
+    assert mining_address == "kaspa:qrxuk57hwz8s8la93jvf44q7e5derclnpg6thkgltya2ek67pvhasz43zf6ys"
+    assert miner_info == "0.14.1/2/0/cxxx/"
+
+
+def test_retrieve_mining_info_from_payload_ecdsa():
+    payload = "7b23e204000000005f2bda6a0200000000002321036441a8148e58123d99bf62777c35a4c7eab682fda9764e7b8047a94c0de014d5ab302e31322e31342f6f6b6d696e6572"
+    miner_info, mining_address = retrieve_miner_info_from_payload(payload)
+    assert mining_address == "kaspa:qypkgsdgzj89sy3anxlkyamuxkjv064kst76jajw0wqy022vphspf4gxj4qr5m5"
+    assert miner_info == "0.12.14/okminer"
