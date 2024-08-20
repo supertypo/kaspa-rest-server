@@ -54,8 +54,8 @@ class BlockHeader(BaseModel):
 
 class ExtraModel(BaseModel):
     color: str | None = None
-    miner_address: str | None = None
-    miner_info: str = None
+    minerAddress: str | None = None
+    minerInfo: str = None
 
 
 class BlockModel(BaseModel):
@@ -92,8 +92,8 @@ async def get_block(response: Response, blockId: str = Path(regex="[a-f0-9]{64}"
         miner_payload = get_miner_payload_from_block(block)
         miner_info, miner_address = retrieve_miner_info_from_payload(miner_payload)
 
-        block["extra"]["miner_info"] = miner_info
-        block["extra"]["miner_address"] = miner_address
+        block["extra"]["minerInfo"] = miner_info
+        block["extra"]["minerAddress"] = miner_address
 
     else:
         if IS_SQL_DB_CONFIGURED:
