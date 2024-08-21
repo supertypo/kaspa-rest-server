@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-from fastapi import Path, HTTPException
+from fastapi import HTTPException
 from typing import List
 from server import app, kaspad_client
 from pydantic import BaseModel
@@ -17,11 +17,7 @@ class FeeEstimateResponse(BaseModel):
     lowBuckets: List[FeeEstimateBucket]
 
 
-@app.get(
-    "/info/fee-estimate",
-    response_model=FeeEstimateResponse,
-    tags=["Kaspa network info"]
-)
+@app.get("/info/fee-estimate", response_model=FeeEstimateResponse, tags=["Kaspa network info"])
 async def get_fee_estimate():
     """
     Get fee estimate from Kaspad
