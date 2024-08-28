@@ -16,9 +16,7 @@ class StrictRoute(APIRoute):
             known_params = [param.alias for param in self.dependant.query_params]
 
             async def custom_route_handler(request: Request) -> Response:
-                unknown_params = [
-                    qp for qp in request.query_params if qp not in known_params
-                ]
+                unknown_params = [qp for qp in request.query_params if qp not in known_params]
                 if any(unknown_params):
                     raise RequestValidationError(
                         errors=[
@@ -33,5 +31,6 @@ class StrictRoute(APIRoute):
                         ]
                     )
                 return await original_route_handler(request)
+
             return custom_route_handler
         return original_route_handler
