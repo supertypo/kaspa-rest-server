@@ -131,6 +131,7 @@ async def get_full_transactions_for_address(
         tx_within_limit_offset = await s.execute(
             select(TxAddrMapping.transaction_id)
             .filter(TxAddrMapping.address == kaspaAddress)
+            .filter(TxAddrMapping.transaction_id.isnot(None))  # The fastest view can return null-transaction_ids
             .limit(limit)
             .offset(offset)
             .order_by(TxAddrMapping.block_time.desc())
@@ -181,6 +182,7 @@ async def get_full_transactions_for_address_page(
         tx_within_limit_before = await s.execute(
             select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
             .filter(TxAddrMapping.address == kaspaAddress)
+            .filter(TxAddrMapping.transaction_id.isnot(None))  # The fastest view can return null-transaction_ids
             .filter(TxAddrMapping.block_time < before)
             .limit(limit)
             .order_by(TxAddrMapping.block_time.desc())
@@ -199,6 +201,7 @@ async def get_full_transactions_for_address_page(
             tx_with_same_block_time = await s.execute(
                 select(TxAddrMapping.transaction_id)
                 .filter(TxAddrMapping.address == kaspaAddress)
+                .filter(TxAddrMapping.transaction_id.isnot(None))  # The fastest view can return null-transaction_ids
                 .filter(TxAddrMapping.block_time == oldest_block_time)
             )
             tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
@@ -226,7 +229,11 @@ async def get_transaction_count_for_address(
     """
 
     async with async_session() as s:
-        count_query = select(func.count()).filter(TxAddrMapping.address == kaspaAddress)
+        count_query = (
+            select(func.count())
+            .filter(TxAddrMapping.address == kaspaAddress)
+            .filter(TxAddrMapping.transaction_id.isnot(None))  # The fastest view can return null-transaction_ids
+        )
 
         tx_count = await s.execute(count_query)
 
