@@ -1,9 +1,8 @@
-from sqlalchemy import TypeDecorator
-from sqlalchemy.dialects.postgresql import BYTEA
+from sqlalchemy import TypeDecorator, BLOB
 
 
 class HexColumn(TypeDecorator):
-    impl = BYTEA
+    impl = BLOB
     cache_ok = True
 
     def process_bind_param(self, value, dialect):

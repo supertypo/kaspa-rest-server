@@ -5,11 +5,12 @@ from typing import List
 from fastapi import Query, Path, HTTPException
 from fastapi import Response
 from pydantic import BaseModel
-from sqlalchemy import select, exists, func
+from sqlalchemy import select, exists, func, literal_column
 
-from dbsession import async_session
+from dbsession import async_session, engine
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.mining_address import get_miner_payload_from_block, retrieve_miner_info_from_payload
+from helper.parsing import split_bytes
 from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
@@ -136,10 +137,16 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
         response.headers["Cache-Control"] = "no-store"
 
     async with async_session() as s:
+        if engine.dialect.name == "mysql":
+            await s.execute("SET SESSION group_concat_max_len = 18446744073709551615")
         blocks = (await s.execute(block_join_query().where(Block.blue_score == blueScore))).all()
 
     result = []
     for block, is_chain_block, parents, children, transaction_ids in blocks:
+        if engine.dialect.name == "mysql":
+            parents = split_bytes(parents)
+            children = split_bytes(children)
+            transaction_ids = split_bytes(transaction_ids)
         transactions = await get_transactions(block.hash, transaction_ids) if includeTransactions else None
         result.append(map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions))
 
@@ -148,12 +155,18 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
 
 async def get_block_from_db(blockId, includeTransactions):
     async with async_session() as s:
-        block = (await s.execute(block_join_query().where(Block.hash == blockId).limit(1))).first()
+        if engine.dialect.name == "mysql":
+            await s.execute("SET SESSION group_concat_max_len = 18446744073709551615")
+        block = (await s.execute(block_join_query().where(Block.hash == blockId).group_by(Block).limit(1))).first()
 
     if block is None:
         return None
 
     block, is_chain_block, parents, children, transaction_ids = block
+    if engine.dialect.name == "mysql":
+        parents = split_bytes(parents)
+        children = split_bytes(children)
+        transaction_ids = split_bytes(transaction_ids)
     transactions = await get_transactions(block.hash, transaction_ids) if includeTransactions else None
     return map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions)
 
@@ -228,6 +241,20 @@ def map_block_from_db(block, is_chain_block, parents, children, transaction_ids,
 
 
 def block_join_query():
+    if engine.dialect.name == "mysql":
+        return select(
+            Block,
+            exists().where(ChainBlock.block_hash == Block.hash),
+            select(func.group_concat(BlockParent.parent_hash.op("SEPARATOR")(literal_column('""'))))
+            .where(BlockParent.block_hash == Block.hash)
+            .scalar_subquery(),
+            select(func.group_concat(BlockParent.block_hash.op("SEPARATOR")(literal_column('""'))))
+            .where(BlockParent.parent_hash == Block.hash)
+            .scalar_subquery(),
+            select(func.group_concat(BlockTransaction.transaction_id.op("SEPARATOR")(literal_column('""'))))
+            .where(BlockTransaction.block_hash == Block.hash)
+            .scalar_subquery(),
+        )
     return select(
         Block,
         exists().where(ChainBlock.block_hash == Block.hash),

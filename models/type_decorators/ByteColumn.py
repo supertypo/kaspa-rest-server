@@ -1,12 +1,11 @@
 import logging
-from sqlalchemy import TypeDecorator
-from sqlalchemy.dialects.postgresql import BYTEA
+from sqlalchemy import TypeDecorator, BLOB
 
 _logger = logging.getLogger(__name__)
 
 
 class ByteColumn(TypeDecorator):
-    impl = BYTEA
+    impl = BLOB
     cache_ok = True
 
     def process_bind_param(self, value, dialect):

@@ -1,4 +1,4 @@
-FROM python:3.12.3-slim
+FROM python:3.12-slim
 
 ARG REPO_DIR
 
@@ -9,7 +9,7 @@ ARG version
 ENV VERSION=$version
 
 RUN apt update
-RUN apt install uvicorn gunicorn -y
+RUN apt install -y uvicorn gunicorn build-essential
 
 WORKDIR /app
 COPY . .
