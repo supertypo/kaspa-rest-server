@@ -1,0 +1,222 @@
+### /addresses/{kaspaAddress}/balance
+GET http://localhost:8000/addresses/kaspa:qqkqkzjvr7zwxxmjxjkmxxdwju9kjs6e9u82uh59z07vgaks6gg62v8707g73/balance
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /addresses/{kaspaAddress}/utxos
+GET http://localhost:8000/addresses/kaspa:qqkqkzjvr7zwxxmjxjkmxxdwju9kjs6e9u82uh59z07vgaks6gg62v8707g73/utxos
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /addresses/{kaspaAddress}/full-transactions
+GET http://localhost:8000/addresses/kaspa:qqkqkzjvr7zwxxmjxjkmxxdwju9kjs6e9u82uh59z07vgaks6gg62v8707g73/full-transactions-page
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /addresses/{kaspaAddress}/full-transactions
+GET http://localhost:8000/addresses/kaspa:qqkqkzjvr7zwxxmjxjkmxxdwju9kjs6e9u82uh59z07vgaks6gg62v8707g73/transactions-count
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/virtual-chain-blue-score
+GET http://localhost:8000/info/virtual-chain-blue-score
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+### /info/blockdag
+GET http://localhost:8000/info/blockdag
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/coinsupply
+GET http://localhost:8000/info/coinsupply
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/coinsupply/circulating
+GET http://localhost:8000/info/coinsupply/circulating
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/coinsupply/total
+GET http://localhost:8000/info/coinsupply/circulating
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/kaspad
+GET http://localhost:8000/info/kaspad
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/network
+GET http://localhost:8000/info/network
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/fee-estimate
+GET http://localhost:8000/info/fee-estimate
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/price
+GET http://localhost:8000/info/price
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/blockreward
+GET http://localhost:8000/info/blockreward
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/halving
+GET http://localhost:8000/info/halving
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/hashrate
+GET http://localhost:8000/info/hashrate
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/hashrate/max
+GET http://localhost:8000/info/hashrate/max
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/health
+GET http://localhost:8000/info/health
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /info/marketcap
+GET http://localhost:8000/info/marketcap
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /blocks/{blockId}
+GET http://localhost:8000/blocks/86ab2c32fcbb5becda8ce29b3730d66d32f85c88e6f32581d4302d64e08c8e9d
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /blocks/{blockId}
+GET http://localhost:8000/blocks?lowHash=86ab2c32fcbb5becda8ce29b3730d66d32f85c88e6f32581d4302d64e08c8e9d
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /blocks-from-bluescore
+GET http://localhost:8000/blocks-from-bluescore?blueScore=88777408
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /transactions
+GET http://localhost:8000/transactions/1e5ed8e87649e308c9fcee19000efe4cd6848dc4d5346068f1b1727346897675
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### /transactions/search
+POST http://localhost:8000/transactions/search?resolve_previous_outpoints=full
+Content-Type: application/json
+
+{
+  "transactionIds": [
+    "1e5ed8e87649e308c9fcee19000efe4cd6848dc4d5346068f1b1727346897675",
+    "751573db7d9051ff4f1de43300e2672176b384ce929f44eed3a651e4725eb36e"
+  ]
+}
+
+> {%
+    client.test("Response status is 200", function() {
+        client.assert(response.status === 200);
+    });
+%}
