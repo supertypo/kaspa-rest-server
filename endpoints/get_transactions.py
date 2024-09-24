@@ -217,7 +217,13 @@ async def search_for_transactions(
 
     async with async_session() as s:
         tx_list = await s.execute(
-            select(Transaction, TransactionAcceptance.block_hash.label("accepting_block_hash"), Block.blue_score)
+            select(
+                Transaction,
+                Subnetwork,
+                TransactionAcceptance.block_hash.label("accepting_block_hash"),
+                Block.blue_score,
+            )
+            .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
             .join(
                 TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id, isouter=True
             )
@@ -285,7 +291,7 @@ async def search_for_transactions(
     return (
         filter_fields(
             {
-                "subnetwork_id": tx.Transaction.subnetwork_id,
+                "subnetwork_id": tx.Subnetwork.subnetwork_id,
                 "transaction_id": tx.Transaction.transaction_id,
                 "hash": tx.Transaction.hash,
                 "mass": tx.Transaction.mass,
