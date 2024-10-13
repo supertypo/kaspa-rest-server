@@ -181,7 +181,9 @@ async def get_full_transactions_for_address_page(
 
         # To avoid gaps when transactions with the same block_time are at the boundry between pages.
         # Get the time of the last transaction and fetch additional transactions for the same address and timestamp
-        tx_with_same_block_time = await s.execute(kaspaAddress, None, None, (oldest_block_time, operator.eq))
+        tx_with_same_block_time = await s.execute(
+            transaction_time_query(kaspaAddress, None, None, (oldest_block_time, operator.eq))
+        )
         tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
 
     response.headers["X-Current-Page"] = str(len(tx_ids))
