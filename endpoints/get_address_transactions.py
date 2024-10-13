@@ -60,9 +60,9 @@ class PreviousOutpointLookupMode(str, Enum):
 )
 @sql_db_only
 async def get_transactions_for_address(
-        kaspaAddress: str = Path(
-            description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-        ),
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
 ):
     """
     Get all transactions for a given address from database
@@ -113,13 +113,13 @@ async def get_transactions_for_address(
 )
 @sql_db_only
 async def get_full_transactions_for_address(
-        kaspaAddress: str = Path(
-            description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-        ),
-        limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
-        offset: int = Query(description="The offset from which to get records", ge=0, default=0),
-        fields: str = "",
-        resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
+    limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
+    offset: int = Query(description="The offset from which to get records", ge=0, default=0),
+    fields: str = "",
+    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
 ):
     """
     Get all transactions for a given address from database.
@@ -143,24 +143,24 @@ async def get_full_transactions_for_address(
 )
 @sql_db_only
 async def get_full_transactions_for_address_page(
-        response: Response,
-        kaspaAddress: str = Path(
-            description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-        ),
-        limit: int = Query(
-            description="The max number of records to get. "
-                        "For paging combine with using 'before' from oldest previous result, "
-                        "repeat until an **empty** resultset is returned."
-                        "The actual number of transactions returned can be higher if there are transactions with the same block time at the limit.",
-            ge=1,
-            le=500,
-            default=50,
-        ),
-        before: int = Query(
-            description="Only include transactions with block time before this (epoch-millis)", ge=0, default=0
-        ),
-        fields: str = "",
-        resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
+    response: Response,
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
+    limit: int = Query(
+        description="The max number of records to get. "
+        "For paging combine with using 'before' from oldest previous result, "
+        "repeat until an **empty** resultset is returned."
+        "The actual number of transactions returned can be higher if there are transactions with the same block time at the limit.",
+        ge=1,
+        le=500,
+        default=50,
+    ),
+    before: int = Query(
+        description="Only include transactions with block time before this (epoch-millis)", ge=0, default=0
+    ),
+    fields: str = "",
+    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
 ):
     """
     Get all transactions for a given address from database.
@@ -168,9 +168,9 @@ async def get_full_transactions_for_address_page(
     """
 
     async with async_session() as s:
-        tx_within_limit_before = await s.execute(transaction_time_query(
-            kaspaAddress, None, limit, (before, operator.lt) if before else None
-        ))
+        tx_within_limit_before = await s.execute(
+            transaction_time_query(kaspaAddress, None, limit, (before, operator.lt) if before else None)
+        )
 
         tx_ids_and_block_times = [(x.transaction_id, x.block_time) for x in tx_within_limit_before.all()]
         if not tx_ids_and_block_times:
@@ -198,9 +198,9 @@ async def get_full_transactions_for_address_page(
 )
 @sql_db_only
 async def get_transaction_count_for_address(
-        kaspaAddress: str = Path(
-            description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-        ),
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
 ):
     """
     Count the number of transactions associated with this address
@@ -221,12 +221,12 @@ async def get_transaction_count_for_address(
 )
 @sql_db_only
 async def get_name_for_address(
-        response: Response,
-        kaspaAddress: str = Path(
-            description="Kaspa address as string e.g. "
-                        "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
-            regex=REGEX_KASPA_ADDRESS,
-        ),
+    response: Response,
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. "
+        "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
+        regex=REGEX_KASPA_ADDRESS,
+    ),
 ):
     """
     Get the name for an address
@@ -250,18 +250,22 @@ def transaction_time_query(kaspaAddress, offset=None, limit=None, block_time_fil
         .filter(TransactionOutput.script_public_key_address == kaspaAddress)
         .order_by(TransactionOutput.block_time.desc())
         .offset(offset)
-        .limit(limit))
+        .limit(limit)
+    )
     inputs_query = (
         select(TransactionInput.transaction_id, TransactionInput.block_time)
-        .join(output_alias,
-              (TransactionInput.previous_outpoint_hash == output_alias.transaction_id) &
-              (TransactionInput.previous_outpoint_index == output_alias.index))
+        .join(
+            output_alias,
+            (TransactionInput.previous_outpoint_hash == output_alias.transaction_id)
+            & (TransactionInput.previous_outpoint_index == output_alias.index),
+        )
         .filter(output_alias.script_public_key_address == kaspaAddress)
         .order_by(TransactionInput.block_time.desc())
         .offset(offset)
-        .limit(limit))
+        .limit(limit)
+    )
     if block_time_filter:
         block_time, comparison = block_time_filter
         outputs_query = outputs_query.filter(comparison(TransactionOutput.block_time, block_time))
         inputs_query = inputs_query.filter(comparison(TransactionInput.block_time, block_time))
-    return union_all(outputs_query, inputs_query).order_by(text('block_time DESC'))
+    return union_all(outputs_query, inputs_query).order_by(text("block_time DESC"))
