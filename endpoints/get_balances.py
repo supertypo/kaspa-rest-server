@@ -35,4 +35,4 @@ async def get_balances_from_kaspa_addresses(body: BalanceRequest):
     if resp.get("error"):
         raise HTTPException(500, resp["error"])
 
-    return resp
+    return resp["entries"]
