@@ -1,7 +1,8 @@
 # encoding: utf-8
+from typing import List
+
 from fastapi import Path, HTTPException
 from pydantic import BaseModel
-from typing import List
 
 from constants import REGEX_KASPA_ADDRESS, ADDRESS_EXAMPLE
 from server import app, kaspad_client
@@ -42,5 +43,24 @@ async def get_utxos_for_address(
             raise HTTPException(status_code=400, detail=resp["getUtxosByAddressesResponse"]["error"])
 
         return (utxo for utxo in resp["getUtxosByAddressesResponse"]["entries"] if utxo["address"] == kaspaAddress)
+    except KeyError:
+        return []
+
+
+class UtxoRequest(BaseModel):
+    addresses: list[str] = [ADDRESS_EXAMPLE]
+
+
+@app.post("/addresses/utxos", response_model=List[UtxoResponse], tags=["Kaspa addresses"])
+async def get_utxos_for_addresses(body: UtxoRequest):
+    """
+    Lists all open utxo for a given kaspa address
+    """
+    resp = await kaspad_client.request("getUtxosByAddressesRequest", params={"addresses": body.addresses}, timeout=120)
+    try:
+        if "getUtxosByAddressesResponse" in resp and "error" in resp["getUtxosByAddressesResponse"]:
+            raise HTTPException(status_code=400, detail=resp["getUtxosByAddressesResponse"]["error"])
+
+        return (utxo for utxo in resp["getUtxosByAddressesResponse"]["entries"])
     except KeyError:
         return []

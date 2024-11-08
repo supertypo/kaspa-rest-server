@@ -16,6 +16,7 @@ from endpoints import (
     get_price,
 )
 from endpoints.get_address_transactions import get_transactions_for_address
+from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
 from endpoints.get_hashrate import get_hashrate
@@ -39,7 +40,7 @@ print(
     f"{get_kaspad_info}, {get_network}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward}"
     f"{get_halving} {health_state} {get_transaction}"
     f"{get_virtual_selected_parent_blue_score} {get_transactions_for_address}"
-    f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price}"
+    f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
 )
 
 if os.getenv("VSPC_REQUEST") == "true":
