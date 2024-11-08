@@ -102,6 +102,7 @@ async def get_transaction(
             select(
                 Transaction,
                 Subnetwork,
+                TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
                 TransactionAcceptance.block_hash.label("accepting_block_hash"),
                 Block.blue_score,
             )
@@ -181,7 +182,7 @@ async def get_transaction(
             "mass": tx.Transaction.mass,
             "block_hash": block_hashes,
             "block_time": tx.Transaction.block_time,
-            "is_accepted": True if tx.accepting_block_hash else False,
+            "is_accepted": True if tx.accepted_transaction_id else False,
             "accepting_block_hash": tx.accepting_block_hash,
             "accepting_block_blue_score": tx.blue_score,
             "outputs": parse_obj_as(List[TxOutput], sorted(tx_outputs, key=lambda x: x.index)) if tx_outputs else None,
@@ -220,6 +221,7 @@ async def search_for_transactions(
             select(
                 Transaction,
                 Subnetwork,
+                TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
                 TransactionAcceptance.block_hash.label("accepting_block_hash"),
                 Block.blue_score,
             )
@@ -297,7 +299,7 @@ async def search_for_transactions(
                 "mass": tx.Transaction.mass,
                 "block_hash": [x.block_hash for x in tx_blocks if x.transaction_id == tx.Transaction.transaction_id],
                 "block_time": tx.Transaction.block_time,
-                "is_accepted": True if tx.accepting_block_hash else False,
+                "is_accepted": True if tx.accepted_transaction_id else False,
                 "accepting_block_hash": tx.accepting_block_hash,
                 "accepting_block_blue_score": tx.blue_score,
                 "outputs": parse_obj_as(
