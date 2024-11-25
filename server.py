@@ -1,7 +1,11 @@
 # encoding: utf-8
 import logging
 import os
+
+from sqlalchemy import select
+from datetime import datetime, timedelta
 from typing import Optional
+from models.Transaction import Transaction
 
 import fastapi.logger
 from fastapi import FastAPI
@@ -53,6 +57,7 @@ class KaspadStatus(BaseModel):
 
 class DatabaseStatus(BaseModel):
     is_online: bool = False
+    last_transaction: int = 0
 
 
 class PingResponse(BaseModel):
@@ -79,10 +84,16 @@ async def ping_server():
         error = True
 
     if os.getenv("SQL_URI") is not None:
-        async with async_session() as session:
+        async with async_session() as s:
             try:
-                await session.execute("SELECT 1")
+                last_block_time = (
+                    await s.execute(select(Transaction.block_time).limit(1).order_by(Transaction.block_time.desc()))
+                ).scalar()
                 result.database.is_online = True
+                time_diff = datetime.now() - datetime.fromtimestamp(last_block_time / 1000)
+                if time_diff > timedelta(minutes=10):
+                    error = True
+                result.database.last_transaction = last_block_time
             except Exception as err:
                 _logger.error("Database health check failed %s", err)
                 error = True
