@@ -167,17 +167,11 @@ async def get_block_from_db(blockId, includeTransactions):
 
 async def get_block_color_from_kaspad(block):
     blockId = block["verboseData"]["hash"]
-    childrenHashes = block["verboseData"]["childrenHashes"]
-    for childId in childrenHashes:
-        resp = await kaspad_client.request("getBlockRequest", params={"hash": childId, "includeTransactions": False})
-        if "block" in resp["getBlockResponse"]:
-            block = resp["getBlockResponse"]["block"]
-            if block["verboseData"].get("isChainBlock", False):
-                if blockId in block["verboseData"]["mergeSetBluesHashes"]:
-                    return "blue"
-                elif blockId in block["verboseData"]["mergeSetRedsHashes"]:
-                    return "red"
-    return None
+    resp = await kaspad_client.request("getCurrentBlockColorRequest", params={"hash": blockId})
+    if "blue" in resp["getCurrentBlockColorResponse"]:
+        return "blue" if resp["getCurrentBlockColorResponse"]["blue"] is True else "red"
+    else:
+        return None
 
 
 async def get_block_color_from_db(block):
