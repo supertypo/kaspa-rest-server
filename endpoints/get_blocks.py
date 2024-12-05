@@ -13,9 +13,9 @@ from helper.mining_address import get_miner_payload_from_block, retrieve_miner_i
 from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
-from models.ChainBlock import ChainBlock
 from models.Subnetwork import Subnetwork
 from models.Transaction import TransactionOutput, TransactionInput, Transaction
+from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
 
 IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
@@ -180,8 +180,9 @@ async def get_block_color_from_db(block):
             (
                 await s.execute(
                     select(Block)
-                    .join(ChainBlock, ChainBlock.block_hash == Block.hash)
-                    .join(BlockParent, BlockParent.block_hash == ChainBlock.block_hash)
+                    .distinct()
+                    .join(TransactionAcceptance, TransactionAcceptance.block_hash == Block.hash)
+                    .join(BlockParent, BlockParent.block_hash == TransactionAcceptance.block_hash)
                     .filter(BlockParent.parent_hash == blockId)
                 )
             )
@@ -230,7 +231,7 @@ def map_block_from_db(block, is_chain_block, parents, children, transaction_ids,
 def block_join_query():
     return select(
         Block,
-        exists().where(ChainBlock.block_hash == Block.hash),
+        exists().where(TransactionAcceptance.block_hash == Block.hash),
         select(func.array_agg(BlockParent.parent_hash)).where(BlockParent.block_hash == Block.hash).scalar_subquery(),
         select(func.array_agg(BlockParent.block_hash)).where(BlockParent.parent_hash == Block.hash).scalar_subquery(),
         select(func.array_agg(BlockTransaction.transaction_id))
