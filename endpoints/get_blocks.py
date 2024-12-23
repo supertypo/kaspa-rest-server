@@ -88,7 +88,10 @@ async def get_block(response: Response, blockId: str = Path(regex="[a-f0-9]{64}"
 
         block["extra"] = {}
         if block and includeColor:
-            block["extra"]["color"] = await get_block_color_from_kaspad(block)
+            if block["verboseData"]["isChainBlock"]:
+                block["extra"] = {"color": "blue"}
+            else:
+                block["extra"]["color"] = await get_block_color_from_kaspad(block)
 
         miner_payload = get_miner_payload_from_block(block)
         miner_info, miner_address = retrieve_miner_info_from_payload(miner_payload)
@@ -101,7 +104,10 @@ async def get_block(response: Response, blockId: str = Path(regex="[a-f0-9]{64}"
             response.headers["X-Data-Source"] = "Database"
             block = await get_block_from_db(blockId, True)
             if block and includeColor:
-                block["extra"] = {"color": await get_block_color_from_db(block)}
+                if block["verboseData"]["isChainBlock"]:
+                    block["extra"] = {"color": "blue"}
+                else:
+                    block["extra"] = {"color": await get_block_color_from_db(block)}
 
     add_cache_control_for_block(block, response)
     return block
@@ -161,17 +167,11 @@ async def get_block_from_db(blockId, includeTransactions):
 
 async def get_block_color_from_kaspad(block):
     blockId = block["verboseData"]["hash"]
-    childrenHashes = block["verboseData"]["childrenHashes"]
-    for childId in childrenHashes:
-        resp = await kaspad_client.request("getBlockRequest", params={"hash": childId, "includeTransactions": False})
-        if "block" in resp["getBlockResponse"]:
-            block = resp["getBlockResponse"]["block"]
-            if block["verboseData"].get("isChainBlock", False):
-                if blockId in block["verboseData"]["mergeSetBluesHashes"]:
-                    return "blue"
-                elif blockId in block["verboseData"]["mergeSetRedsHashes"]:
-                    return "red"
-    return None
+    resp = await kaspad_client.request("getCurrentBlockColorRequest", params={"hash": blockId})
+    if "blue" in resp["getCurrentBlockColorResponse"]:
+        return "blue" if resp["getCurrentBlockColorResponse"]["blue"] is True else "red"
+    else:
+        return None
 
 
 async def get_block_color_from_db(block):
