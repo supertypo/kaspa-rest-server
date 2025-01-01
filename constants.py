@@ -1,6 +1,7 @@
 import os
 
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
+BPS = os.getenv("BPS", "1")
 
 match NETWORK_TYPE:
     case "mainnet":
@@ -20,5 +21,15 @@ match NETWORK_TYPE:
 
 ADDRESS_PREFIX = address_prefix
 ADDRESS_EXAMPLE = address_example
+
+match BPS:
+    case "1":
+        bps = 1
+    case "10":
+        bps = 10
+    case _:
+        raise ValueError(f"Network type {BPS} not supported.")
+
+BPS = bps
 
 REGEX_KASPA_ADDRESS = "^" + ADDRESS_PREFIX + ":[a-z0-9]{61,63}$"
