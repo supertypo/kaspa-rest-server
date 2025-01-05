@@ -56,6 +56,7 @@ class TxModel(BaseModel):
     transaction_id: str | None
     hash: str | None
     mass: str | None
+    payload: str | None
     block_hash: List[str] | None
     block_time: int | None
     is_accepted: bool | None
@@ -180,6 +181,7 @@ async def get_transaction(
             "transaction_id": tx.Transaction.transaction_id,
             "hash": tx.Transaction.hash,
             "mass": tx.Transaction.mass,
+            "payload": tx.Transaction.payload,
             "block_hash": block_hashes,
             "block_time": tx.Transaction.block_time,
             "is_accepted": True if tx.accepted_transaction_id else False,
@@ -297,6 +299,7 @@ async def search_for_transactions(
                 "transaction_id": tx.Transaction.transaction_id,
                 "hash": tx.Transaction.hash,
                 "mass": tx.Transaction.mass,
+                "payload": tx.Transaction.payload,
                 "block_hash": [x.block_hash for x in tx_blocks if x.transaction_id == tx.Transaction.transaction_id],
                 "block_time": tx.Transaction.block_time,
                 "is_accepted": True if tx.accepted_transaction_id else False,
