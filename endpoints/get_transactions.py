@@ -358,7 +358,7 @@ async def get_transaction_from_kaspad(block_hashes, transactionId, includeInputs
                         }
                         for tx_in_idx, tx_in in enumerate(tx["inputs"])
                     ]
-                    if includeInputs
+                    if includeInputs and tx["inputs"]
                     else None,
                     "outputs": [
                         {
@@ -371,6 +371,6 @@ async def get_transaction_from_kaspad(block_hashes, transactionId, includeInputs
                         }
                         for tx_out_idx, tx_out in enumerate(tx["outputs"])
                     ]
-                    if includeOutputs
+                    if includeOutputs and tx["outputs"]
                     else None,
                 }
