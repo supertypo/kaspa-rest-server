@@ -59,9 +59,7 @@ class PreviousOutpointLookupMode(str, Enum):
 )
 @sql_db_only
 async def get_transactions_for_address(
-    kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-    ),
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
 ):
     """
     Get all transactions for a given address from database
@@ -112,9 +110,7 @@ async def get_transactions_for_address(
 )
 @sql_db_only
 async def get_full_transactions_for_address(
-    kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-    ),
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
     limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
     offset: int = Query(description="The offset from which to get records", ge=0, default=0),
     fields: str = "",
@@ -151,9 +147,7 @@ async def get_full_transactions_for_address(
 @sql_db_only
 async def get_full_transactions_for_address_page(
     response: Response,
-    kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-    ),
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
     limit: int = Query(
         description="The max number of records to get. "
         "For paging combine with using 'before' from oldest previous result, "
@@ -217,9 +211,7 @@ async def get_full_transactions_for_address_page(
 )
 @sql_db_only
 async def get_transaction_count_for_address(
-    kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-    ),
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
 ):
     """
     Count the number of transactions associated with this address
@@ -243,8 +235,7 @@ async def get_transaction_count_for_address(
 async def get_name_for_address(
     response: Response,
     kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. "
-        "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
+        description="Kaspa address as string e.g. kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
         regex=REGEX_KASPA_ADDRESS,
     ),
 ):
