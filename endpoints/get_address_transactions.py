@@ -1,5 +1,4 @@
 # encoding: utf-8
-import re
 import time
 from enum import Enum
 from typing import List
@@ -20,9 +19,18 @@ from server import app
 
 DESC_RESOLVE_PARAM = (
     "Use this parameter if you want to fetch the TransactionInput previous outpoint details."
-    " Light fetches only the address and amount. Full fetches the whole TransactionOutput and "
+    " Light fetches only the adress and amount. Full fetches the whole TransactionOutput and "
     "adds it into each TxInput."
 )
+
+
+class AddressesActiveRequest(BaseModel):
+    addresses: list[str] = [ADDRESS_EXAMPLE]
+
+
+class TxIdResponse(BaseModel):
+    address: str
+    active: bool
 
 
 class TransactionsReceivedAndSpent(BaseModel):
@@ -51,57 +59,6 @@ class PreviousOutpointLookupMode(str, Enum):
 
 
 @app.get(
-    "/addresses/{kaspaAddress}/transactions",
-    response_model=TransactionForAddressResponse,
-    response_model_exclude_unset=True,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_transactions_for_address(
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
-):
-    """
-    Get all transactions for a given address from database
-    """
-    # SELECT transactions_outputs.transaction_id, transactions_inputs.transaction_id as inp_transaction FROM transactions_outputs
-    #
-    # LEFT JOIN transactions_inputs ON transactions_inputs.previous_outpoint_hash = transactions_outputs.transaction_id AND transactions_inputs.previous_outpoint_index::int = transactions_outputs.index
-    #
-    # WHERE "script_public_key_address" = 'kaspa:qp7d7rzrj34s2k3qlxmguuerfh2qmjafc399lj6606fc7s69l84h7mrj49hu6'
-    #
-    # ORDER by transactions_outputs.transaction_id
-    kaspaAddress = re.sub(
-        r"^kaspa(test)?:", "", kaspaAddress
-    )  # Custom query bypasses the TypeDecorator, must handle it manually
-    async with async_session() as session:
-        resp = await session.execute(
-            text("""
-            SELECT o.transaction_id, i.transaction_id
-            FROM transactions t
-            LEFT JOIN transactions_outputs o ON t.transaction_id = o.transaction_id
-            LEFT JOIN transactions_inputs i ON i.previous_outpoint_hash = t.transaction_id AND i.previous_outpoint_index = o.index
-            WHERE o.script_public_key_address = :kaspaAddress
-            ORDER by t.block_time DESC
-            LIMIT 500"""),
-            {"kaspaAddress": kaspaAddress},
-        )
-
-        resp = resp.all()
-
-    # build response
-    tx_list = []
-    for x in resp:
-        tx_list.append(
-            {
-                "tx_received": x[0].hex() if x[0] is not None else None,
-                "tx_spent": x[1].hex() if x[1] is not None else None,
-            }
-        )
-    return {"transactions": tx_list}
-
-
-@app.get(
     "/addresses/{kaspaAddress}/full-transactions",
     response_model=List[TxModel],
     response_model_exclude_unset=True,
@@ -110,7 +67,9 @@ async def get_transactions_for_address(
 )
 @sql_db_only
 async def get_full_transactions_for_address(
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
     limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
     offset: int = Query(description="The offset from which to get records", ge=0, default=0),
     fields: str = "",
@@ -137,6 +96,41 @@ async def get_full_transactions_for_address(
     return await search_for_transactions(TxSearch(transactionIds=tx_ids_in_page), fields, resolve_previous_outpoints)
 
 
+@app.post(
+    "/addresses/active",
+    response_model=List[TxIdResponse],
+    response_model_exclude_unset=True,
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
+@sql_db_only
+async def get_addresses_active(addresses_active_request: AddressesActiveRequest):
+    """
+    This endpoint checks if addresses have had any transaction activity in the past.
+    It is specifically designed for HD Wallets to verify historical address activity.
+    """
+    async with async_session() as s:
+        query = text(f"""SELECT subquery.address
+                     FROM (VALUES
+                           {",".join(["(:a{})".format(i) for i in range(len(addresses_active_request.addresses))])}
+                     ) AS subquery (address)
+                     LEFT JOIN addresses_transactions t ON subquery.address = t.address
+                     WHERE t.address IS NULL""")
+
+        # Create a dictionary to bind the addresses to the query parameters
+        params = {
+            "a{}".format(i): address.split(":")[1] for i, address in enumerate(addresses_active_request.addresses)
+        }
+
+        non_active_addresses = await s.execute(query, params)
+
+    non_active_addresses = [x[0] for x in non_active_addresses.all()]
+    return [
+        TxIdResponse(address=address, active=(address.split(":")[1] not in non_active_addresses))
+        for address in addresses_active_request.addresses
+    ]
+
+
 @app.get(
     "/addresses/{kaspaAddress}/full-transactions-page",
     response_model=List[TxModel],
@@ -147,7 +141,9 @@ async def get_full_transactions_for_address(
 @sql_db_only
 async def get_full_transactions_for_address_page(
     response: Response,
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
     limit: int = Query(
         description="The max number of records to get. "
         "For paging combine with using 'before' from oldest previous result, "
@@ -211,7 +207,9 @@ async def get_full_transactions_for_address_page(
 )
 @sql_db_only
 async def get_transaction_count_for_address(
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    kaspaAddress: str = Path(
+        description="Kaspa address as string e.g. " f"{ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
 ):
     """
     Count the number of transactions associated with this address
@@ -235,7 +233,8 @@ async def get_transaction_count_for_address(
 async def get_name_for_address(
     response: Response,
     kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
+        description="Kaspa address as string e.g. "
+        "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
         regex=REGEX_KASPA_ADDRESS,
     ),
 ):
