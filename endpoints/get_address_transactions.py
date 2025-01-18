@@ -142,9 +142,9 @@ async def get_full_transactions_for_address_page(
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
     limit: int = Query(
         description="The max number of records to get. "
-        "For paging combine with using 'before/after' from oldest previous result, "
-        "repeat until an **empty** resultset is returned."
-        "The actual number of transactions returned can be higher if there are transactions with the same block time at the intersections.",
+        "For paging combine with using 'before/after' from oldest previous result. "
+        "Use value of X-Next-Page-Before/-After as long as header is present to continue paging. "
+        "The actual number of transactions returned for each page can be > limit.",
         ge=1,
         le=500,
         default=50,
@@ -204,8 +204,9 @@ async def get_full_transactions_for_address_page(
             tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
 
     response.headers["X-Page-Count"] = str(len(tx_ids))
-    response.headers["X-Next-Page-After"] = str(newest_block_time)
-    response.headers["X-Next-Page-Before"] = str(oldest_block_time)
+    if len(tx_ids) >= limit:
+        response.headers["X-Next-Page-After"] = str(newest_block_time)
+        response.headers["X-Next-Page-Before"] = str(oldest_block_time)
 
     # Legacy:
     response.headers["X-Current-Page"] = str(len(tx_ids))
