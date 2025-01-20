@@ -163,8 +163,13 @@ async def get_transaction(
             )
             acceptance = acceptance.first()
             transaction["is_accepted"] = True if acceptance else False
-            transaction["accepting_block_hash"] = acceptance.block_hash if acceptance else None
-            transaction["accepting_block_blue_score"] = acceptance.blue_score if acceptance else None
+
+            if acceptance and acceptance.block_hash:
+                transaction["accepting_block_hash"] = acceptance.block_hash
+                if acceptance.blue_score:
+                    transaction["accepting_block_blue_score"] = acceptance.blue_score if acceptance else None
+                else:
+                    transaction["accepting_block_blue_score"] = await get_blue_score_from_kaspad(acceptance.block_hash)
 
             if inputs and resolve_previous_outpoints in ["light", "full"]:
                 tx_inputs = await s.execute(
@@ -294,8 +299,10 @@ async def search_for_transactions(
         else:
             tx_outputs = None
 
-    return (
-        filter_fields(
+    results = []
+    for tx in tx_list:
+        accepting_blue_score = tx.blue_score or await get_blue_score_from_kaspad(tx.accepting_block_hash)
+        result = filter_fields(
             {
                 "subnetwork_id": tx.Subnetwork.subnetwork_id,
                 "transaction_id": tx.Transaction.transaction_id,
@@ -306,7 +313,7 @@ async def search_for_transactions(
                 "block_time": tx.Transaction.block_time,
                 "is_accepted": True if tx.accepted_transaction_id else False,
                 "accepting_block_hash": tx.accepting_block_hash,
-                "accepting_block_blue_score": tx.blue_score,
+                "accepting_block_blue_score": accepting_blue_score,
                 "outputs": parse_obj_as(
                     List[TxOutput],
                     sorted(
@@ -328,8 +335,8 @@ async def search_for_transactions(
             },
             fields,
         )
-        for tx in tx_list
-    )
+        results.append(result)
+    return results
 
 
 async def get_transaction_from_kaspad(block_hashes, transactionId, includeInputs, includeOutputs):
@@ -374,3 +381,10 @@ async def get_transaction_from_kaspad(block_hashes, transactionId, includeInputs
                     if includeOutputs and tx["outputs"]
                     else None,
                 }
+
+
+async def get_blue_score_from_kaspad(block_hash):
+    if block_hash:
+        resp = await kaspad_client.request("getBlockRequest", params={"hash": block_hash, "includeTransactions": False})
+        blue_score = resp.get("getBlockResponse", {}).get("block", {}).get("header", {}).get("blueScore")
+        return blue_score
