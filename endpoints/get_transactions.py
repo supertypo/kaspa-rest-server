@@ -62,7 +62,7 @@ class TxModel(BaseModel):
     is_accepted: bool | None
     accepting_block_hash: str | None
     accepting_block_blue_score: int | None
-    accepting_block_timestamp: int | None
+    accepting_block_time: int | None
     inputs: List[TxInput] | None
     outputs: List[TxOutput] | None
 
@@ -168,12 +168,12 @@ async def get_transaction(
             if acceptance and acceptance.block_hash:
                 transaction["accepting_block_hash"] = acceptance.block_hash
                 transaction["accepting_block_blue_score"] = acceptance.blue_score
-                transaction["accepting_block_timestamp"] = acceptance.timestamp
+                transaction["accepting_block_time"] = acceptance.timestamp
                 if not acceptance.blue_score:
                     accepting_block = await get_block_from_kaspad(acceptance.block_hash)
                     if accepting_block:
                         transaction["accepting_block_blue_score"] = accepting_block.get("header", {}).get("blueScore")
-                        transaction["accepting_block_timestamp"] = accepting_block.get("header", {}).get("timestamp")
+                        transaction["accepting_block_time"] = accepting_block.get("header", {}).get("timestamp")
 
             if inputs and resolve_previous_outpoints in ["light", "full"]:
                 tx_inputs = await s.execute(
@@ -237,7 +237,7 @@ async def search_for_transactions(
                 TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
                 TransactionAcceptance.block_hash.label("accepting_block_hash"),
                 Block.blue_score.label("accepting_block_blue_score"),
-                Block.timestamp.label("accepting_block_timestamp"),
+                Block.timestamp.label("accepting_block_time"),
             )
             .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
             .join(
@@ -307,12 +307,12 @@ async def search_for_transactions(
     results = []
     for tx in tx_list:
         accepting_block_blue_score = tx.accepting_block_blue_score
-        accepting_block_timestamp = tx.accepting_block_timestamp
+        accepting_block_time = tx.accepting_block_time
         if not accepting_block_blue_score:
             accepting_block = await get_block_from_kaspad(tx.accepting_block_hash)
             if accepting_block:
                 accepting_block_blue_score = accepting_block.get("header", {}).get("blueScore")
-                accepting_block_timestamp = accepting_block.get("header", {}).get("timestamp")
+                accepting_block_time = accepting_block.get("header", {}).get("timestamp")
 
         result = filter_fields(
             {
@@ -326,7 +326,7 @@ async def search_for_transactions(
                 "is_accepted": True if tx.accepted_transaction_id else False,
                 "accepting_block_hash": tx.accepting_block_hash,
                 "accepting_block_blue_score": accepting_block_blue_score,
-                "accepting_block_timestamp": accepting_block_timestamp,
+                "accepting_block_time": accepting_block_time,
                 "outputs": parse_obj_as(
                     List[TxOutput],
                     sorted(
