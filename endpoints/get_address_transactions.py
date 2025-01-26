@@ -2,6 +2,7 @@
 import time
 from enum import Enum
 from typing import List
+from constants import DISABLE_LIMITS
 
 from fastapi import Path, Query, HTTPException
 from pydantic import BaseModel
@@ -45,6 +46,7 @@ class TransactionForAddressResponse(BaseModel):
 
 class TransactionCount(BaseModel):
     total: int
+    limit_exceeded: bool
 
 
 class AddressName(BaseModel):
@@ -203,18 +205,34 @@ async def get_full_transactions_for_address_page(
 )
 @sql_db_only
 async def get_transaction_count_for_address(
+    response: Response,
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
 ):
     """
     Count the number of transactions associated with this address
     """
-
     async with async_session() as s:
-        count_query = select(func.count()).filter(TxAddrMapping.address == kaspaAddress)
+        if DISABLE_LIMITS:
+            result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspaAddress))
+        else:
+            result = await s.execute(
+                select(func.count()).select_from(
+                    select(1).filter(TxAddrMapping.address == kaspaAddress).limit(100001).subquery()
+                )
+            )
+        tx_count = result.scalar()
+        limit_exceeded = False
+        ttl = 8
+        if not DISABLE_LIMITS:
+            if tx_count > 10000:
+                tx_count = 10000
+                limit_exceeded = True
+                ttl = 86400
+            elif tx_count > 1000:
+                ttl = 30
 
-        tx_count = await s.execute(count_query)
-
-    return TransactionCount(total=tx_count.scalar())
+    response.headers["Cache-Control"] = f"public, max-age={ttl}"
+    return TransactionCount(total=tx_count, limit_exceeded=limit_exceeded)
 
 
 @app.get(
