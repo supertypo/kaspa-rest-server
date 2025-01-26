@@ -158,7 +158,12 @@ async def get_transaction(
 
         if transaction:
             acceptance = await s.execute(
-                select(TransactionAcceptance.transaction_id, TransactionAcceptance.block_hash, Block.blue_score, Block.timestamp)
+                select(
+                    TransactionAcceptance.transaction_id,
+                    TransactionAcceptance.block_hash,
+                    Block.blue_score,
+                    Block.timestamp,
+                )
                 .join(Block, TransactionAcceptance.block_hash == Block.hash, isouter=True)
                 .filter(TransactionAcceptance.transaction_id == transactionId)
             )
