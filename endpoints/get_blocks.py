@@ -339,13 +339,15 @@ async def get_transactions(blockId, transactionIds):
                     if tx_out.transaction_id == tx.transaction_id
                 ],
                 "subnetworkId": sub.subnetwork_id,
+                "payload": tx.payload,
                 "verboseData": {
                     "transactionId": tx.transaction_id,
                     "hash": tx.hash,
-                    "mass": tx.mass,
+                    "computeMass": tx.mass,
                     "blockHash": blockId,
                     "blockTime": tx.block_time,
                 },
+                "mass": tx.mass,
             }
         )
     return tx_list
