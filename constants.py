@@ -1,6 +1,7 @@
 import os
 
 DISABLE_LIMITS = os.getenv("DISABLE_LIMITS", "false").lower() == "true"
+TX_COUNT_LIMIT = 10_000
 
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = os.getenv("BPS", "1")

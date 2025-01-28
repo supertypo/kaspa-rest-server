@@ -2,11 +2,11 @@
 import time
 from enum import Enum
 from typing import List
-from constants import DISABLE_LIMITS
+from constants import DISABLE_LIMITS, TX_COUNT_LIMIT
 
 from fastapi import Path, Query, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import text, func, or_
+from sqlalchemy import or_
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -15,7 +15,7 @@ from dbsession import async_session
 from endpoints import sql_db_only
 from endpoints.get_transactions import search_for_transactions, TxSearch, TxModel
 from models.AddressKnown import AddressKnown
-from models.TxAddrMapping import TxAddrMapping
+from models.Transaction import TransactionOutput, TransactionInput
 from server import app
 
 DESC_RESOLVE_PARAM = (
@@ -34,16 +34,6 @@ class TxIdResponse(BaseModel):
     active: bool
 
 
-class TransactionsReceivedAndSpent(BaseModel):
-    tx_received: str
-    tx_spent: str | None
-    # received_amount: int = 38240000000
-
-
-class TransactionForAddressResponse(BaseModel):
-    transactions: List[TransactionsReceivedAndSpent]
-
-
 class TransactionCount(BaseModel):
     total: int
     limit_exceeded: bool
@@ -60,42 +50,6 @@ class PreviousOutpointLookupMode(str, Enum):
     full = "full"
 
 
-@app.get(
-    "/addresses/{kaspaAddress}/full-transactions",
-    response_model=List[TxModel],
-    response_model_exclude_unset=True,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_full_transactions_for_address(
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
-    limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
-    offset: int = Query(description="The offset from which to get records", ge=0, default=0),
-    fields: str = "",
-    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
-):
-    """
-    Get all transactions for a given address from database.
-    And then get their related full transaction data
-    """
-
-    async with async_session() as s:
-        # Doing it this way as opposed to adding it directly in the IN clause
-        # so I can re-use the same result in tx_list, TxInput and TxOutput
-        tx_within_limit_offset = await s.execute(
-            select(TxAddrMapping.transaction_id)
-            .filter(TxAddrMapping.address == kaspaAddress)
-            .limit(limit)
-            .offset(offset)
-            .order_by(TxAddrMapping.block_time.desc())
-        )
-
-        tx_ids_in_page = [x[0] for x in tx_within_limit_offset.all()]
-
-    return await search_for_transactions(TxSearch(transactionIds=tx_ids_in_page), fields, resolve_previous_outpoints)
-
-
 @app.post(
     "/addresses/active",
     response_model=List[TxIdResponse],
@@ -110,36 +64,71 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
     It is specifically designed for HD Wallets to verify historical address activity.
     """
     async with async_session() as s:
-        query = text(f"""SELECT subquery.address
-                     FROM (VALUES
-                           {",".join(["(:a{})".format(i) for i in range(len(addresses_active_request.addresses))])}
-                     ) AS subquery (address)
-                     LEFT JOIN addresses_transactions t ON subquery.address = t.address
-                     WHERE t.address IS NULL""")
+        addresses = set(addresses_active_request.addresses)
+        result = await s.execute(
+            select(TransactionOutput.script_public_key_address)
+            .distinct(TransactionOutput.script_public_key_address)
+            .filter(TransactionOutput.script_public_key_address.in_(addresses))
+            .order_by(TransactionOutput.script_public_key_address)
+        )
+        addresses_used = set(result.scalars().all())
+        addresses_remaining = addresses.difference(addresses_used)
 
-        # Create a dictionary to bind the addresses to the query parameters
-        params = {
-            "a{}".format(i): address.split(":")[1] for i, address in enumerate(addresses_active_request.addresses)
-        }
+        if addresses_remaining:
+            result = await s.execute(
+                select(TransactionOutput.script_public_key_address)
+                .distinct(TransactionOutput.script_public_key_address)
+                .select_from(TransactionInput)
+                .join(
+                    TransactionOutput,
+                    (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
+                    & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
+                )
+                .filter(TransactionOutput.script_public_key_address.in_(addresses_remaining))
+                .order_by(TransactionOutput.script_public_key_address)
+            )
+            addresses_used.update(result.scalars().all())
 
-        non_active_addresses = await s.execute(query, params)
-
-    non_active_addresses = [x[0] for x in non_active_addresses.all()]
     return [
-        TxIdResponse(address=address, active=(address.split(":")[1] not in non_active_addresses))
+        TxIdResponse(address=address, active=(address in addresses_used))
         for address in addresses_active_request.addresses
     ]
 
 
 @app.get(
-    "/addresses/{kaspaAddress}/full-transactions-page",
+    "/addresses/{kaspaAddress}/full-transactions",
     response_model=List[TxModel],
     response_model_exclude_unset=True,
     tags=["Kaspa addresses"],
     openapi_extra={"strict_query_params": True},
+    deprecated=True,
 )
 @sql_db_only
-async def get_full_transactions_for_address_page(
+async def get_full_transactions_deprecated(
+    response: Response,
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
+    offset: int = Query(description="Not usable anymore", ge=0, default=0),
+    fields: str = "",
+    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
+):
+    """
+    DEPRECATED due to db model change.
+    """
+    if offset != 0:
+        return []
+    return await get_full_transactions(response, kaspaAddress, limit, 0, 0, fields, resolve_previous_outpoints)
+
+
+@app.get(
+    "/addresses/{kaspaAddress}/transactions",
+    response_model=List[TxModel],
+    response_model_exclude_unset=True,
+    tags=["Kaspa addresses"],
+    # openapi_extra={"strict_query_params": True}, // TODO: uncomment
+)
+@sql_db_only
+async def get_full_transactions(
     response: Response,
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
     limit: int = Query(
@@ -152,41 +141,62 @@ async def get_full_transactions_for_address_page(
         default=50,
     ),
     before: int = Query(
-        description="Only include transactions with block time before this (epoch-millis)", ge=0, default=0
+        description="Only include transactions with block time before this (epoch-millis)", ge=0, default=None
     ),
     after: int = Query(
-        description="Only include transactions with block time after this (epoch-millis)", ge=0, default=0
+        description="Only include transactions with block time after this (epoch-millis)", ge=0, default=None
     ),
     fields: str = "",
     resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
 ):
     """
-    Get all transactions for a given address from database.
-    And then get their related full transaction data
+    Get transactions for a given address.
     """
-    query = (
-        select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
-        .filter(TxAddrMapping.address == kaspaAddress)
+    queryOutputs = (
+        select(TransactionOutput.transaction_id, TransactionOutput.block_time)
+        .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+        .limit(limit)
+    )
+    queryInputs = (
+        select(TransactionInput.transaction_id, TransactionInput.block_time)
+        .join(
+            TransactionOutput,
+            (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
+            & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
+        )
+        .filter(TransactionOutput.script_public_key_address == kaspaAddress)
         .limit(limit)
     )
     response.headers["X-Page-Count"] = "0"
-    if before != 0 and after != 0:
+    if before and after:
         raise HTTPException(status_code=400, detail="Only one of [before, after] can be present")
-    elif before != 0:
+    elif before:
         if before <= 1636298787842:  # genesis block_time
             return []
-        query = query.filter(TxAddrMapping.block_time < before).order_by(TxAddrMapping.block_time.desc())
-    elif after != 0:
+        queryOutputs = queryOutputs.filter(TransactionOutput.block_time < before).order_by(
+            TransactionOutput.block_time.desc()
+        )
+        queryInputs = queryInputs.filter(TransactionInput.block_time < before).order_by(
+            TransactionInput.block_time.desc()
+        )
+    elif after:
         if after > int(time.time() * 1000) + 3600000:  # now + 1 hour
             return []
-        query = query.filter(TxAddrMapping.block_time > after).order_by(TxAddrMapping.block_time.asc())
+        queryOutputs = queryOutputs.filter(TransactionOutput.block_time > after).order_by(
+            TransactionOutput.block_time.asc()
+        )
+        queryInputs = queryInputs.filter(TransactionInput.block_time > after).order_by(
+            TransactionInput.block_time.asc()
+        )
     else:
-        query = query.order_by(TxAddrMapping.block_time.desc())
+        queryOutputs = queryOutputs.order_by(TransactionOutput.block_time.desc())
+        queryInputs = queryInputs.order_by(TransactionInput.block_time.desc())
 
     async with async_session() as s:
-        tx_within_limit_before = await s.execute(query)
-
-        tx_ids_and_block_times = [(x.transaction_id, x.block_time) for x in tx_within_limit_before.all()]
+        tx_within_limit = await s.execute(queryOutputs)
+        tx_ids_and_block_times = [(x.transaction_id, x.block_time) for x in tx_within_limit.all()]
+        tx_within_limit = await s.execute(queryInputs)
+        tx_ids_and_block_times.extend([(x.transaction_id, x.block_time) for x in tx_within_limit.all()])
         if not tx_ids_and_block_times:
             return []
 
@@ -194,25 +204,41 @@ async def get_full_transactions_for_address_page(
         newest_block_time = tx_ids_and_block_times[0][1]
         oldest_block_time = tx_ids_and_block_times[-1][1]
         tx_ids = {tx_id for tx_id, block_time in tx_ids_and_block_times}
+
         if len(tx_ids_and_block_times) == limit:
             # To avoid gaps when transactions with the same block_time are at the intersection between pages.
             tx_with_same_block_time = await s.execute(
-                select(TxAddrMapping.transaction_id)
-                .filter(TxAddrMapping.address == kaspaAddress)
+                select(TransactionOutput.transaction_id)
+                .filter(TransactionOutput.script_public_key_address == kaspaAddress)
                 .filter(
-                    or_(TxAddrMapping.block_time == newest_block_time, TxAddrMapping.block_time == oldest_block_time)
+                    or_(
+                        TransactionOutput.block_time == newest_block_time,
+                        TransactionOutput.block_time == oldest_block_time,
+                    )
                 )
             )
-            tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
+            tx_ids.update(tx_with_same_block_time.scalars().all())
+            tx_with_same_block_time = await s.execute(
+                select(TransactionInput.transaction_id, TransactionInput.block_time)
+                .join(
+                    TransactionOutput,
+                    (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
+                    & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
+                )
+                .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+                .filter(
+                    or_(
+                        TransactionOutput.block_time == newest_block_time,
+                        TransactionOutput.block_time == oldest_block_time,
+                    )
+                )
+            )
+            tx_ids.update(tx_with_same_block_time.scalars().all())
 
     response.headers["X-Page-Count"] = str(len(tx_ids))
     if len(tx_ids) >= limit:
         response.headers["X-Next-Page-After"] = str(newest_block_time)
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
-
-    # Legacy:
-    response.headers["X-Current-Page"] = str(len(tx_ids))
-    response.headers["X-Oldest-Epoch-Millis"] = str(oldest_block_time)
 
     return await search_for_transactions(TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints)
 
@@ -231,25 +257,56 @@ async def get_transaction_count_for_address(
     """
     Count the number of transactions associated with this address
     """
+    tx_ids = set()
     async with async_session() as s:
         if DISABLE_LIMITS:
-            result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspaAddress))
+            result = await s.execute(
+                select(TransactionOutput.transaction_id)
+                .distinct()
+                .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+            )
+            tx_ids.update((result.scalars().all()))
+            result = await s.execute(
+                select(TransactionInput.transaction_id)
+                .distinct()
+                .join(
+                    TransactionOutput,
+                    (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
+                    & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
+                )
+                .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+            )
+            tx_ids.update(result.scalars().all())
         else:
             result = await s.execute(
-                select(func.count()).select_from(
-                    select(1).filter(TxAddrMapping.address == kaspaAddress).limit(100001).subquery()
-                )
+                select(TransactionOutput.transaction_id)
+                .distinct()
+                .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+                .limit(1 + TX_COUNT_LIMIT)
             )
-        tx_count = result.scalar()
+            tx_ids.update(result.scalars().all())
+            if len(tx_ids) < 1 + TX_COUNT_LIMIT:
+                result = await s.execute(
+                    select(TransactionInput.transaction_id)
+                    .distinct()
+                    .join(
+                        TransactionOutput,
+                        (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
+                        & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
+                    )
+                    .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+                    .limit(1 + TX_COUNT_LIMIT - len(tx_ids))
+                )
+                tx_ids.update(result.scalars().all())
+
+        tx_count = len(tx_ids)
         limit_exceeded = False
         ttl = 8
         if not DISABLE_LIMITS:
-            if tx_count > 10000:
-                tx_count = 10000
+            if tx_count > TX_COUNT_LIMIT:
+                tx_count = TX_COUNT_LIMIT
                 limit_exceeded = True
                 ttl = 86400
-            elif tx_count > 1000:
-                ttl = 30
 
     response.headers["Cache-Control"] = f"public, max-age={ttl}"
     return TransactionCount(total=tx_count, limit_exceeded=limit_exceeded)

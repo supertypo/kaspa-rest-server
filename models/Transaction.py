@@ -23,6 +23,7 @@ class TransactionOutput(Base):
     amount = Column(BigInteger)
     script_public_key = Column(HexColumn)
     script_public_key_address = Column(AddressColumn)
+    block_time = Column(BigInteger)
 
     @property
     def script_public_key_type(self):
@@ -37,3 +38,4 @@ class TransactionInput(Base):
     previous_outpoint_index = Column(SmallInteger)
     signature_script = Column(HexColumn)
     sig_op_count = Column(SmallInteger)
+    block_time = Column(BigInteger)
