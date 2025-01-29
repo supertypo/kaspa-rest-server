@@ -200,7 +200,7 @@ async def get_full_transactions(
         if not tx_ids_and_block_times:
             return []
 
-        tx_ids_and_block_times = sorted(tx_ids_and_block_times, key=lambda x: x[1], reverse=True)
+        tx_ids_and_block_times = sorted(tx_ids_and_block_times, key=lambda x: x[1] or 0, reverse=True)
         newest_block_time = tx_ids_and_block_times[0][1]
         oldest_block_time = tx_ids_and_block_times[-1][1]
         tx_ids = {tx_id for tx_id, block_time in tx_ids_and_block_times}
