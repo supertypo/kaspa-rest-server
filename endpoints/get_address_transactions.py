@@ -121,11 +121,19 @@ async def get_full_transactions_deprecated(
 
 
 @app.get(
+    "/addresses/{kaspaAddress}/full-transactions-page",
+    response_model=List[TxModel],
+    response_model_exclude_unset=True,
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+    deprecated=True,
+)
+@app.get(
     "/addresses/{kaspaAddress}/transactions",
     response_model=List[TxModel],
     response_model_exclude_unset=True,
     tags=["Kaspa addresses"],
-    # openapi_extra={"strict_query_params": True}, // TODO: uncomment
+    openapi_extra={"strict_query_params": True},
 )
 @sql_db_only
 async def get_full_transactions(
