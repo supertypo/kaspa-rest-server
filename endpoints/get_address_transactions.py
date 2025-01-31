@@ -69,8 +69,9 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
     async with async_session() as s:
         addresses = set(addresses_active_request.addresses)
         result = await s.execute(
-            select(TransactionOutput.script_public_key_address)
-            .filter(TransactionOutput.script_public_key_address.in_(addresses))
+            select(TransactionOutput.script_public_key_address).filter(
+                TransactionOutput.script_public_key_address.in_(addresses)
+            )
         )
         addresses_used = set(result.scalars().all())
         addresses_remaining = addresses.difference(addresses_used)
@@ -268,14 +269,13 @@ async def get_transaction_count_for_address(
     async with async_session() as s:
         if DISABLE_LIMITS:
             result = await s.execute(
-                select(TransactionOutput.transaction_id)
-                .distinct()
-                .filter(TransactionOutput.script_public_key_address == kaspaAddress)
+                select(TransactionOutput.transaction_id).filter(
+                    TransactionOutput.script_public_key_address == kaspaAddress
+                )
             )
             tx_ids.update((result.scalars().all()))
             result = await s.execute(
                 select(TransactionInput.transaction_id)
-                .distinct()
                 .join(
                     TransactionOutput,
                     (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
