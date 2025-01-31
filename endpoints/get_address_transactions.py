@@ -63,13 +63,14 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
     This endpoint checks if addresses have had any transaction activity in the past.
     It is specifically designed for HD Wallets to verify historical address activity.
     """
+    if not addresses_active_request.addresses:
+        return []
+
     async with async_session() as s:
         addresses = set(addresses_active_request.addresses)
         result = await s.execute(
             select(TransactionOutput.script_public_key_address)
-            .distinct(TransactionOutput.script_public_key_address)
             .filter(TransactionOutput.script_public_key_address.in_(addresses))
-            .order_by(TransactionOutput.script_public_key_address)
         )
         addresses_used = set(result.scalars().all())
         addresses_remaining = addresses.difference(addresses_used)
@@ -77,7 +78,6 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
         if addresses_remaining:
             result = await s.execute(
                 select(TransactionOutput.script_public_key_address)
-                .distinct(TransactionOutput.script_public_key_address)
                 .select_from(TransactionInput)
                 .join(
                     TransactionOutput,
@@ -85,7 +85,6 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
                     & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
                 )
                 .filter(TransactionOutput.script_public_key_address.in_(addresses_remaining))
-                .order_by(TransactionOutput.script_public_key_address)
             )
             addresses_used.update(result.scalars().all())
 
@@ -113,7 +112,7 @@ async def get_full_transactions_deprecated(
     resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
 ):
     """
-    DEPRECATED due to db model change.
+    DEPRECATED due to db model change. Use transactions instead.
     """
     if offset != 0:
         return []
