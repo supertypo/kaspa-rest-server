@@ -291,7 +291,7 @@ async def get_transaction_count_for_address(
                 .filter(TransactionOutput.script_public_key_address == kaspaAddress)
                 .limit(1 + TX_COUNT_LIMIT)
             )
-            tx_count = result.scalar()
+            tx_count = len(result.scalars().all())
             if tx_count < 1 + TX_COUNT_LIMIT:
                 result = await s.execute(
                     select(TransactionInput.transaction_id)
@@ -303,7 +303,7 @@ async def get_transaction_count_for_address(
                     .filter(TransactionOutput.script_public_key_address == kaspaAddress)
                     .limit(1 + TX_COUNT_LIMIT - tx_count)
                 )
-                tx_count += result.scalar()
+                tx_count += len(result.scalars().all())
 
         limit_exceeded = False
         ttl = 8
