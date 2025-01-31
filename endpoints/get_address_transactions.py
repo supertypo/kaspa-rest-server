@@ -7,6 +7,7 @@ from constants import DISABLE_LIMITS, TX_COUNT_LIMIT
 from fastapi import Path, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import or_
+from sqlalchemy import func
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -265,17 +266,17 @@ async def get_transaction_count_for_address(
     """
     Count the number of transactions associated with this address
     """
-    tx_ids = set()
+    tx_count = 0
     async with async_session() as s:
         if DISABLE_LIMITS:
             result = await s.execute(
-                select(TransactionOutput.transaction_id).filter(
+                select(func.count(TransactionOutput.transaction_id)).filter(
                     TransactionOutput.script_public_key_address == kaspaAddress
                 )
             )
-            tx_ids.update((result.scalars().all()))
+            tx_count = result.scalar()
             result = await s.execute(
-                select(TransactionInput.transaction_id)
+                select(func.count(TransactionInput.transaction_id))
                 .join(
                     TransactionOutput,
                     (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
@@ -283,30 +284,27 @@ async def get_transaction_count_for_address(
                 )
                 .filter(TransactionOutput.script_public_key_address == kaspaAddress)
             )
-            tx_ids.update(result.scalars().all())
+            tx_count += result.scalar()
         else:
             result = await s.execute(
                 select(TransactionOutput.transaction_id)
-                .distinct()
                 .filter(TransactionOutput.script_public_key_address == kaspaAddress)
                 .limit(1 + TX_COUNT_LIMIT)
             )
-            tx_ids.update(result.scalars().all())
-            if len(tx_ids) < 1 + TX_COUNT_LIMIT:
+            tx_count = result.scalar()
+            if tx_count < 1 + TX_COUNT_LIMIT:
                 result = await s.execute(
                     select(TransactionInput.transaction_id)
-                    .distinct()
                     .join(
                         TransactionOutput,
                         (TransactionInput.previous_outpoint_hash == TransactionOutput.transaction_id)
                         & (TransactionInput.previous_outpoint_index == TransactionOutput.index),
                     )
                     .filter(TransactionOutput.script_public_key_address == kaspaAddress)
-                    .limit(1 + TX_COUNT_LIMIT - len(tx_ids))
+                    .limit(1 + TX_COUNT_LIMIT - tx_count)
                 )
-                tx_ids.update(result.scalars().all())
+                tx_count += result.scalar()
 
-        tx_count = len(tx_ids)
         limit_exceeded = False
         ttl = 8
         if not DISABLE_LIMITS:
