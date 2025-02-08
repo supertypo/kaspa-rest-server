@@ -309,12 +309,15 @@ async def search_for_transactions(
         else:
             tx_outputs = None
 
+    block_cache = {}
     results = []
     for tx in tx_list:
         accepting_block_blue_score = tx.accepting_block_blue_score
         accepting_block_time = tx.accepting_block_time
         if not accepting_block_blue_score:
-            accepting_block = await get_block_from_kaspad(tx.accepting_block_hash)
+            if not tx.accepting_block_hash in block_cache:
+                block_cache[tx.accepting_block_hash] = await get_block_from_kaspad(tx.accepting_block_hash)
+            accepting_block = block_cache[tx.accepting_block_hash]
             if accepting_block:
                 accepting_block_blue_score = accepting_block.get("header", {}).get("blueScore")
                 accepting_block_time = accepting_block.get("header", {}).get("timestamp")
