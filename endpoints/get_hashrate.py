@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from constants import BPS
-from dbsession import async_session
+from dbsession import async_session, async_session_blocks
 from endpoints import sql_db_only
 from helper import KeyValueStore
 from helper.difficulty_calculation import bits_to_difficulty
@@ -60,7 +60,7 @@ async def get_max_hashrate():
     maxhash_last_value = json.loads((await KeyValueStore.get("maxhash_last_value")) or "{}")
     maxhash_last_bluescore = int((await KeyValueStore.get("maxhash_last_bluescore")) or 0)
 
-    async with async_session() as s:
+    async with async_session_blocks() as s:
         block = (
             await s.execute(
                 select(Block)

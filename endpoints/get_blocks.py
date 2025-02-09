@@ -208,7 +208,7 @@ async def get_block_color_from_kaspad(block):
 
 async def get_block_color_from_db(block):
     blockId = block["verboseData"]["hash"]
-    async with async_session() as s:
+    async with async_session_blocks() as s:
         blocks = (
             (
                 await s.execute(
