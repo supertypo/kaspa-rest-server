@@ -1,6 +1,7 @@
 # encoding: utf-8
 
 import logging
+from collections import defaultdict
 from enum import Enum
 from typing import List
 
@@ -279,9 +280,9 @@ async def search_for_transactions(
             tx_blocks = (await session_blocks.execute(
                 select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(txSearch.transactionIds))
             )).scalars().all()
-            tx_blocks_dict = {}
+            tx_blocks_dict = defaultdict(list)
             for row in tx_blocks:
-                tx_blocks_dict.setdefault(row.transaction_id, []).append(row.block_hash)
+                tx_blocks_dict[row.transaction_id].append(row.block_hash)
             tx_blocks = tx_blocks_dict
 
         if not fields or "inputs" in fields:
@@ -294,34 +295,47 @@ async def search_for_transactions(
                         & (TransactionOutput.index == TransactionInput.previous_outpoint_index),
                     )
                     .filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
+                    .order_by(TransactionInput.transaction_id, TransactionInput.index)
                 )).all()
-                for tx_in, tx_prev_outputs in tx_inputs:
-                    # it is possible, that the old tx is not in database. Leave fields empty
-                    if tx_prev_outputs:
-                        tx_in.previous_outpoint_amount = tx_prev_outputs.amount
-                        tx_in.previous_outpoint_address = tx_prev_outputs.script_public_key_address
+
+                tx_inputs_dict = defaultdict(list)
+                for tx_input, tx_prev_output in tx_inputs:
+                    if tx_prev_output:
+                        tx_input.previous_outpoint_amount = tx_prev_output.amount
+                        tx_input.previous_outpoint_address = tx_prev_output.script_public_key_address
                         if resolve_previous_outpoints == "full":
-                            tx_in.previous_outpoint_resolved = tx_prev_outputs
+                            tx_input.previous_outpoint_resolved = tx_prev_output
                     else:
-                        tx_in.previous_outpoint_amount = None
-                        tx_in.previous_outpoint_address = None
+                        tx_input.previous_outpoint_amount = None
+                        tx_input.previous_outpoint_address = None
                         if resolve_previous_outpoints == "full":
-                            tx_in.previous_outpoint_resolved = None
+                            tx_input.previous_outpoint_resolved = None
+                    tx_inputs_dict[tx_input.transaction_id].append(tx_input)
             else:
                 tx_inputs = (await session.execute(
-                    select(TransactionInput).filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
-                )).all()
-            tx_inputs = [x[0] for x in tx_inputs]
+                    select(TransactionInput)
+                    .filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
+                    .order_by(TransactionInput.transaction_id, TransactionInput.index)
+                )).scalars().all()
+                tx_inputs_dict = defaultdict(list)
+                for tx_input in tx_inputs:
+                    tx_inputs_dict[tx_input.transaction_id].append(tx_input)
+            tx_inputs = tx_inputs_dict
         else:
-            tx_inputs = None
+            tx_inputs = {}
 
         if not fields or "outputs" in fields:
-            tx_outputs = await session.execute(
-                select(TransactionOutput).filter(TransactionOutput.transaction_id.in_(txSearch.transactionIds))
-            )
-            tx_outputs = tx_outputs.scalars().all()
+            tx_outputs = (await session.execute(
+                select(TransactionOutput)
+                .filter(TransactionOutput.transaction_id.in_(txSearch.transactionIds))
+                .order_by(TransactionOutput.transaction_id, TransactionOutput.index)
+            )).scalars().all()
+            tx_outputs_dict = defaultdict(list)
+            for tx_output in tx_outputs:
+                tx_outputs_dict[tx_output.transaction_id].append(tx_output)
+            tx_outputs = tx_outputs_dict
         else:
-            tx_outputs = None
+            tx_outputs = {}
 
     block_cache = {}
     results = []
@@ -354,24 +368,8 @@ async def search_for_transactions(
                 "accepting_block_hash": tx.accepting_block_hash,
                 "accepting_block_blue_score": accepting_block_blue_score,
                 "accepting_block_time": accepting_block_time,
-                "outputs": parse_obj_as(
-                    List[TxOutput],
-                    sorted(
-                        [x for x in tx_outputs if x.transaction_id == tx.Transaction.transaction_id],
-                        key=lambda x: x.index,
-                    ),
-                )
-                if tx_outputs
-                else None,  # parse only if needed
-                "inputs": parse_obj_as(
-                    List[TxInput],
-                    sorted(
-                        [x for x in tx_inputs if x.transaction_id == tx.Transaction.transaction_id],
-                        key=lambda x: x.index,
-                    ),
-                )
-                if tx_inputs
-                else None,  # parse only if needed
+                "outputs": tx_outputs.get(tx.Transaction.transaction_id),
+                "inputs": tx_inputs.get(tx.Transaction.transaction_id),
             },
             fields,
         )
