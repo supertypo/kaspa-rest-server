@@ -1,6 +1,7 @@
 # encoding: utf-8
 import os
 import time
+import logging
 from typing import List
 
 from fastapi import Query, Path, HTTPException
@@ -8,7 +9,7 @@ from fastapi import Response
 from pydantic import BaseModel
 from sqlalchemy import select, exists, func
 
-from dbsession import async_session
+from dbsession import async_session, async_session_blocks
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.difficulty_calculation import bits_to_difficulty
 from helper.mining_address import get_miner_payload_from_block, retrieve_miner_info_from_payload
@@ -19,6 +20,8 @@ from models.Subnetwork import Subnetwork
 from models.Transaction import TransactionOutput, TransactionInput, Transaction
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
+
+_logger = logging.getLogger(__name__)
 
 IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
@@ -90,6 +93,7 @@ async def get_block(
     resp = await kaspad_client.request("getBlockRequest", params={"hash": blockId, "includeTransactions": True})
     block = None
     if "block" in resp["getBlockResponse"]:
+        logging.debug(f"Found block {blockId} in kaspad")
         block = resp["getBlockResponse"]["block"]
 
         block["extra"] = {}
@@ -111,11 +115,13 @@ async def get_block(
         if IS_SQL_DB_CONFIGURED:
             response.headers["X-Data-Source"] = "Database"
             block = await get_block_from_db(blockId, includeTransactions)
-            if block and includeColor:
-                if block["verboseData"]["isChainBlock"]:
-                    block["extra"] = {"color": "blue"}
-                else:
-                    block["extra"] = {"color": await get_block_color_from_db(block)}
+            if block:
+                logging.debug(f"Found block {blockId} in database")
+                if includeColor:
+                    if block["verboseData"]["isChainBlock"]:
+                        block["extra"] = {"color": "blue"}
+                    else:
+                        block["extra"] = {"color": await get_block_color_from_db(block)}
 
     add_cache_control_for_block(block, response)
     return block
@@ -143,14 +149,14 @@ async def get_blocks(
 @app.get("/blocks-from-bluescore", response_model=List[BlockModel], tags=["Kaspa blocks"])
 async def get_blocks_from_bluescore(response: Response, blueScore: int = 43679173, includeTransactions: bool = False):
     """
-    Lists block beginning from a low hash (block id)
+    Lists blocks of a given blueScore
     """
     response.headers["X-Data-Source"] = "Database"
 
     if blueScore > current_blue_score_data["blue_score"] - 20:
         response.headers["Cache-Control"] = "no-store"
 
-    async with async_session() as s:
+    async with async_session_blocks() as s:
         blocks = (await s.execute(block_join_query().where(Block.blue_score == blueScore))).all()
 
     result = []
@@ -162,11 +168,13 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
 
 
 async def get_block_from_db(block_id, include_transactions):
-    async with async_session() as s:
+    async with async_session_blocks() as s:
         result = (await s.execute(block_join_query().where(Block.hash == block_id).limit(1))).first()
-        if result:
-            block, is_chain_block, parents, children, transaction_ids = result
-        else:
+
+    if result:
+        block, is_chain_block, parents, children, transaction_ids = result
+    else:
+        async with async_session() as s:
             result = (
                 await s.execute(
                     select(
