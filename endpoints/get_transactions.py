@@ -261,7 +261,7 @@ async def search_for_transactions(
         txSearch.acceptingBlueScoreGte = txSearch.acceptingBlueScoreLt - 100
     elif txSearch.acceptingBlueScoreGte and not txSearch.acceptingBlueScoreLt:
         txSearch.acceptingBlueScoreLt = txSearch.acceptingBlueScoreGte + 100
-    if txSearch.acceptingBlueScoreLt - txSearch.acceptingBlueScoreGte > 100:
+    if txSearch.acceptingBlueScoreLt and txSearch.acceptingBlueScoreLt - txSearch.acceptingBlueScoreGte > 100:
         raise HTTPException(
             400, "Diff between acceptingBlueScoreBefore and acceptingBlueScoreAfter must be equal or less than 100"
         )
