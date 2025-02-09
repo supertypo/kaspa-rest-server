@@ -282,34 +282,39 @@ async def search_for_transactions(
             )
 
             if txSearch.acceptingBlueScoreGte:
-                accepting_block_hashes = await session_blocks.execute(
-                    select(Block.hash)
+                tx_acceptances = await session_blocks.execute(
+                    select(
+                        Block.hash.label("accepting_block_hash"),
+                        Block.blue_score.label("accepting_block_blue_score"),
+                        Block.timestamp.label("accepting_block_time"),
+                    )
                     .filter(exists().where(TransactionAcceptance.block_hash == Block.hash))  # Only chain blocks
                     .filter(Block.blue_score >= txSearch.acceptingBlueScoreGte)
                     .filter(Block.blue_score < txSearch.acceptingBlueScoreLt)
                 )
-                accepting_block_hashes = accepting_block_hashes.scalars().all()
-                tx_query = tx_query.filter(TransactionAcceptance.block_hash.in_(accepting_block_hashes))
+                tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
+                if not tx_acceptances:
+                    return []
+                tx_query = tx_query.filter(TransactionAcceptance.block_hash.in_(tx_acceptances.keys()))
+                tx_list = (await session.execute(tx_query)).all()
+                transaction_ids = [row.Transaction.transaction_id for row in tx_list]
             else:
                 tx_query = tx_query.filter(Transaction.transaction_id.in_(txSearch.transactionIds))
-
-            tx_list = (await session.execute(tx_query)).all()
-
-            transaction_ids = []
-            accepting_block_hashes = []
-            for row in tx_list:
-                transaction_ids.append(row.Transaction.transaction_id)
-                if row.accepting_block_hash:
-                    accepting_block_hashes.append(row.accepting_block_hash)
-
-            tx_acceptances = await session_blocks.execute(
-                select(
-                    Block.hash.label("accepting_block_hash"),
-                    Block.blue_score.label("accepting_block_blue_score"),
-                    Block.timestamp.label("accepting_block_time"),
-                ).filter(Block.hash.in_(accepting_block_hashes))
-            )
-            tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
+                tx_list = (await session.execute(tx_query)).all()
+                if not tx_list:
+                    return []
+                transaction_ids = txSearch.transactionIds
+                accepting_block_hashes = [
+                    row.accepting_block_hash for row in tx_list if row.accepting_block_hash is not None
+                ]
+                tx_acceptances = await session_blocks.execute(
+                    select(
+                        Block.hash.label("accepting_block_hash"),
+                        Block.blue_score.label("accepting_block_blue_score"),
+                        Block.timestamp.label("accepting_block_time"),
+                    ).filter(Block.hash.in_(accepting_block_hashes))
+                )
+                tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
 
             tx_blocks = await session_blocks.execute(
                 select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(transaction_ids))
