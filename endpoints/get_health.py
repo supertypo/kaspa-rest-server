@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from constants import BPS
-from dbsession import async_session, async_session_blocks
+from dbsession import async_session_blocks
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from models.Block import Block
 from server import app, kaspad_client

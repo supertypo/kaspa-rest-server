@@ -268,26 +268,26 @@ async def search_for_transactions(
 
         async with async_session_blocks() as session_blocks:
             accepting_block_hashes = [row.accepting_block_hash for row in tx_list if row.accepting_block_hash]
-            tx_acceptances = (await session_blocks.execute(
+            tx_acceptances = await session_blocks.execute(
                 select(
                     Block.hash.label("accepting_block_hash"),
                     Block.blue_score.label("accepting_block_blue_score"),
                     Block.timestamp.label("accepting_block_time"),
                 ).filter(Block.hash.in_(accepting_block_hashes))
-            )).all()
-            tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances}
+            )
+            tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
 
-            tx_blocks = (await session_blocks.execute(
+            tx_blocks = await session_blocks.execute(
                 select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(txSearch.transactionIds))
-            )).scalars().all()
+            )
             tx_blocks_dict = defaultdict(list)
-            for row in tx_blocks:
+            for row in tx_blocks.scalars().all():
                 tx_blocks_dict[row.transaction_id].append(row.block_hash)
             tx_blocks = tx_blocks_dict
 
         if not fields or "inputs" in fields:
             if resolve_previous_outpoints in ["light", "full"]:
-                tx_inputs = (await session.execute(
+                tx_inputs = await session.execute(
                     select(TransactionInput, TransactionOutput)
                     .outerjoin(
                         TransactionOutput,
@@ -296,10 +296,10 @@ async def search_for_transactions(
                     )
                     .filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
                     .order_by(TransactionInput.transaction_id, TransactionInput.index)
-                )).all()
+                )
 
                 tx_inputs_dict = defaultdict(list)
-                for tx_input, tx_prev_output in tx_inputs:
+                for tx_input, tx_prev_output in tx_inputs.all():
                     if tx_prev_output:
                         tx_input.previous_outpoint_amount = tx_prev_output.amount
                         tx_input.previous_outpoint_address = tx_prev_output.script_public_key_address
@@ -312,26 +312,26 @@ async def search_for_transactions(
                             tx_input.previous_outpoint_resolved = None
                     tx_inputs_dict[tx_input.transaction_id].append(tx_input)
             else:
-                tx_inputs = (await session.execute(
+                tx_inputs = await session.execute(
                     select(TransactionInput)
                     .filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
                     .order_by(TransactionInput.transaction_id, TransactionInput.index)
-                )).scalars().all()
+                )
                 tx_inputs_dict = defaultdict(list)
-                for tx_input in tx_inputs:
+                for tx_input in tx_inputs.scalars().all():
                     tx_inputs_dict[tx_input.transaction_id].append(tx_input)
             tx_inputs = tx_inputs_dict
         else:
             tx_inputs = {}
 
         if not fields or "outputs" in fields:
-            tx_outputs = (await session.execute(
+            tx_outputs = await session.execute(
                 select(TransactionOutput)
                 .filter(TransactionOutput.transaction_id.in_(txSearch.transactionIds))
                 .order_by(TransactionOutput.transaction_id, TransactionOutput.index)
-            )).scalars().all()
+            )
             tx_outputs_dict = defaultdict(list)
-            for tx_output in tx_outputs:
+            for tx_output in tx_outputs.scalars().all():
                 tx_outputs_dict[tx_output.transaction_id].append(tx_output)
             tx_outputs = tx_outputs_dict
         else:

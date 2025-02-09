@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from constants import BPS
-from dbsession import async_session, async_session_blocks
+from dbsession import async_session_blocks
 from endpoints import sql_db_only
 from helper import KeyValueStore
 from helper.difficulty_calculation import bits_to_difficulty
