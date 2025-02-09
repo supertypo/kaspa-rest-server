@@ -7,6 +7,7 @@ from typing import List
 
 from fastapi import Path, HTTPException, Query
 from pydantic import BaseModel, parse_obj_as
+from sqlalchemy import exists
 from sqlalchemy.future import select
 
 from dbsession import async_session, async_session_blocks
@@ -278,13 +279,12 @@ async def search_for_transactions(
                 )
                 .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
                 .outerjoin(TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id)
-                .order_by(Transaction.block_time.desc())
             )
 
             if txSearch.acceptingBlueScoreGte:
                 accepting_block_hashes = await session_blocks.execute(
                     select(Block.hash)
-                    .join(TransactionAcceptance, Block.hash == TransactionAcceptance.block_hash)  # Only chain blocks
+                    .filter(exists().where(TransactionAcceptance.block_hash == Block.hash))  # Only chain blocks
                     .filter(Block.blue_score >= txSearch.acceptingBlueScoreGte)
                     .filter(Block.blue_score < txSearch.acceptingBlueScoreLt)
                 )
@@ -331,7 +331,6 @@ async def search_for_transactions(
                         .filter(TransactionInput.transaction_id.in_(transaction_ids))
                         .order_by(TransactionInput.transaction_id, TransactionInput.index)
                     )
-
                     tx_inputs_dict = defaultdict(list)
                     for tx_input, tx_prev_output in tx_inputs.all():
                         if tx_prev_output:
