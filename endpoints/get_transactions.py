@@ -1,8 +1,8 @@
 # encoding: utf-8
 
+import logging
 from enum import Enum
 from typing import List
-import logging
 
 from fastapi import Path, HTTPException, Query
 from pydantic import BaseModel, parse_obj_as
@@ -249,36 +249,44 @@ async def search_for_transactions(
 
     fields = fields.split(",") if fields else []
 
-    async with async_session() as s:
-        tx_list = await s.execute(
-            select(
-                Transaction,
-                Subnetwork,
-                TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
-                TransactionAcceptance.block_hash.label("accepting_block_hash"),
-                Block.blue_score.label("accepting_block_blue_score"),
-                Block.timestamp.label("accepting_block_time"),
+    async with async_session() as session:
+        tx_list = (
+            await session.execute(
+                select(
+                    Transaction,
+                    Subnetwork,
+                    TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
+                    TransactionAcceptance.block_hash.label("accepting_block_hash"),
+                )
+                .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
+                .outerjoin(TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id)
+                .filter(Transaction.transaction_id.in_(txSearch.transactionIds))
+                .order_by(Transaction.block_time.desc())
             )
-            .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
-            .join(
-                TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id, isouter=True
-            )
-            .join(Block, TransactionAcceptance.block_hash == Block.hash, isouter=True)
-            .filter(Transaction.transaction_id.in_(txSearch.transactionIds))
-            .order_by(Transaction.block_time.desc())
-        )
+        ).all()
 
-        tx_list = tx_list.all()
+        async with async_session_blocks() as session_blocks:
+            accepting_block_hashes = [row.accepting_block_hash for row in tx_list if row.accepting_block_hash]
+            tx_acceptances = (await session_blocks.execute(
+                select(
+                    Block.hash.label("accepting_block_hash"),
+                    Block.blue_score.label("accepting_block_blue_score"),
+                    Block.timestamp.label("accepting_block_time"),
+                ).filter(Block.hash.in_(accepting_block_hashes))
+            )).all()
+            tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances}
 
-        tx_blocks = await s.execute(
-            select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(txSearch.transactionIds))
-        )
-        tx_blocks = tx_blocks.scalars().all()
+            tx_blocks = (await session_blocks.execute(
+                select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(txSearch.transactionIds))
+            )).scalars().all()
+            tx_blocks_dict = {}
+            for row in tx_blocks:
+                tx_blocks_dict.setdefault(row.transaction_id, []).append(row.block_hash)
+            tx_blocks = tx_blocks_dict
 
         if not fields or "inputs" in fields:
-            # join TxOutputs if needed
             if resolve_previous_outpoints in ["light", "full"]:
-                tx_inputs = await s.execute(
+                tx_inputs = (await session.execute(
                     select(TransactionInput, TransactionOutput)
                     .outerjoin(
                         TransactionOutput,
@@ -286,38 +294,29 @@ async def search_for_transactions(
                         & (TransactionOutput.index == TransactionInput.previous_outpoint_index),
                     )
                     .filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
-                )
-
-            # without joining previous_tx_outputs
-            else:
-                tx_inputs = await s.execute(
-                    select(TransactionInput).filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
-                )
-            tx_inputs = tx_inputs.all()
-
-            if resolve_previous_outpoints in ["light", "full"]:
+                )).all()
                 for tx_in, tx_prev_outputs in tx_inputs:
                     # it is possible, that the old tx is not in database. Leave fields empty
-                    if not tx_prev_outputs:
+                    if tx_prev_outputs:
+                        tx_in.previous_outpoint_amount = tx_prev_outputs.amount
+                        tx_in.previous_outpoint_address = tx_prev_outputs.script_public_key_address
+                        if resolve_previous_outpoints == "full":
+                            tx_in.previous_outpoint_resolved = tx_prev_outputs
+                    else:
                         tx_in.previous_outpoint_amount = None
                         tx_in.previous_outpoint_address = None
                         if resolve_previous_outpoints == "full":
                             tx_in.previous_outpoint_resolved = None
-                        continue
-
-                    tx_in.previous_outpoint_amount = tx_prev_outputs.amount
-                    tx_in.previous_outpoint_address = tx_prev_outputs.script_public_key_address
-                    if resolve_previous_outpoints == "full":
-                        tx_in.previous_outpoint_resolved = tx_prev_outputs
-
-            # remove unneeded list
+            else:
+                tx_inputs = (await session.execute(
+                    select(TransactionInput).filter(TransactionInput.transaction_id.in_(txSearch.transactionIds))
+                )).all()
             tx_inputs = [x[0] for x in tx_inputs]
-
         else:
             tx_inputs = None
 
         if not fields or "outputs" in fields:
-            tx_outputs = await s.execute(
+            tx_outputs = await session.execute(
                 select(TransactionOutput).filter(TransactionOutput.transaction_id.in_(txSearch.transactionIds))
             )
             tx_outputs = tx_outputs.scalars().all()
@@ -327,15 +326,20 @@ async def search_for_transactions(
     block_cache = {}
     results = []
     for tx in tx_list:
-        accepting_block_blue_score = tx.accepting_block_blue_score
-        accepting_block_time = tx.accepting_block_time
-        if not accepting_block_blue_score:
-            if tx.accepting_block_hash not in block_cache:
-                block_cache[tx.accepting_block_hash] = await get_block_from_kaspad(tx.accepting_block_hash)
-            accepting_block = block_cache[tx.accepting_block_hash]
-            if accepting_block:
-                accepting_block_blue_score = accepting_block.get("header", {}).get("blueScore")
-                accepting_block_time = accepting_block.get("header", {}).get("timestamp")
+        accepting_block_blue_score = None
+        accepting_block_time = None
+        accepting_block = tx_acceptances.get(tx.accepting_block_hash)
+        if accepting_block:
+            accepting_block_blue_score = accepting_block.accepting_block_blue_score
+            accepting_block_time = accepting_block.accepting_block_time
+        else:
+            if tx.accepting_block_hash:
+                if tx.accepting_block_hash not in block_cache:
+                    block_cache[tx.accepting_block_hash] = await get_block_from_kaspad(tx.accepting_block_hash)
+                accepting_block = block_cache[tx.accepting_block_hash]
+                if accepting_block:
+                    accepting_block_blue_score = accepting_block.get("header", {}).get("blueScore")
+                    accepting_block_time = accepting_block.get("header", {}).get("timestamp")
 
         result = filter_fields(
             {
@@ -344,7 +348,7 @@ async def search_for_transactions(
                 "hash": tx.Transaction.hash,
                 "mass": tx.Transaction.mass,
                 "payload": tx.Transaction.payload,
-                "block_hash": [x.block_hash for x in tx_blocks if x.transaction_id == tx.Transaction.transaction_id],
+                "block_hash": tx_blocks.get(tx.Transaction.transaction_id),
                 "block_time": tx.Transaction.block_time,
                 "is_accepted": True if tx.accepted_transaction_id else False,
                 "accepting_block_hash": tx.accepting_block_hash,
