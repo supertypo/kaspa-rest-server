@@ -32,9 +32,9 @@ class TxOutput(BaseModel):
     transaction_id: str
     index: int
     amount: int
-    script_public_key: str
-    script_public_key_address: str
-    script_public_key_type: str
+    script_public_key: str | None
+    script_public_key_address: str | None
+    script_public_key_type: str | None
     accepting_block_hash: str | None
 
     class Config:
