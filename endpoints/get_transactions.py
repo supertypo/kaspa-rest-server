@@ -49,8 +49,8 @@ class TxInput(BaseModel):
     previous_outpoint_resolved: TxOutput | None
     previous_outpoint_address: str | None
     previous_outpoint_amount: int | None
-    signature_script: str
-    sig_op_count: str
+    signature_script: str | None
+    sig_op_count: str | None
 
     class Config:
         orm_mode = True
