@@ -1,12 +1,16 @@
 # encoding: utf-8
+import re
 import time
 from enum import Enum
 from typing import List
-from constants import DISABLE_LIMITS
+
+from kaspa_script_address import to_script
+
+from constants import DISABLE_LIMITS, USE_SCRIPT_FOR_ADDRESS
 
 from fastapi import Path, Query, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import text, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -15,7 +19,7 @@ from dbsession import async_session
 from endpoints import sql_db_only
 from endpoints.get_transactions import search_for_transactions, TxSearch, TxModel
 from models.AddressKnown import AddressKnown
-from models.TxAddrMapping import TxAddrMapping
+from models.TxAddrMapping import TxAddrMapping, TxScriptMapping
 from server import app
 
 DESC_RESOLVE_PARAM = (
@@ -79,19 +83,30 @@ async def get_full_transactions_for_address(
     Get all transactions for a given address from database.
     And then get their related full transaction data
     """
+    try:
+        script = to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
 
     async with async_session() as s:
-        # Doing it this way as opposed to adding it directly in the IN clause
-        # so I can re-use the same result in tx_list, TxInput and TxOutput
-        tx_within_limit_offset = await s.execute(
-            select(TxAddrMapping.transaction_id)
-            .filter(TxAddrMapping.address == kaspaAddress)
-            .limit(limit)
-            .offset(offset)
-            .order_by(TxAddrMapping.block_time.desc())
-        )
+        if USE_SCRIPT_FOR_ADDRESS:
+            tx_within_limit_offset = await s.execute(
+                select(TxScriptMapping.transaction_id)
+                .filter(TxScriptMapping.script_public_key == script)
+                .limit(limit)
+                .offset(offset)
+                .order_by(TxScriptMapping.block_time.desc())
+            )
+        else:
+            tx_within_limit_offset = await s.execute(
+                select(TxAddrMapping.transaction_id)
+                .filter(TxAddrMapping.address == kaspaAddress)
+                .limit(limit)
+                .offset(offset)
+                .order_by(TxAddrMapping.block_time.desc())
+            )
 
-        tx_ids_in_page = [x[0] for x in tx_within_limit_offset.all()]
+    tx_ids_in_page = [x[0] for x in tx_within_limit_offset.all()]
 
     return await search_for_transactions(TxSearch(transactionIds=tx_ids_in_page), fields, resolve_previous_outpoints)
 
@@ -110,23 +125,29 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
     It is specifically designed for HD Wallets to verify historical address activity.
     """
     async with async_session() as s:
-        query = text(f"""SELECT subquery.address
-                     FROM (VALUES
-                           {",".join(["(:a{})".format(i) for i in range(len(addresses_active_request.addresses))])}
-                     ) AS subquery (address)
-                     LEFT JOIN addresses_transactions t ON subquery.address = t.address
-                     WHERE t.address IS NULL""")
+        addresses = set(addresses_active_request.addresses)
+        script_addresses = set()
+        for address in addresses:
+            try:
+                if not re.search(REGEX_KASPA_ADDRESS, address):
+                    raise ValueError
+                script_addresses.add(to_script(address))
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid address: {address}")
 
-        # Create a dictionary to bind the addresses to the query parameters
-        params = {
-            "a{}".format(i): address.split(":")[1] for i, address in enumerate(addresses_active_request.addresses)
-        }
+        if USE_SCRIPT_FOR_ADDRESS:
+            result = await s.execute(
+                select(TxScriptMapping).filter(TxScriptMapping.script_public_key.in_(script_addresses))
+            )
+            addresses_used = set(r.script_public_key_address for r in result.scalars().all())
+        else:
+            result = await s.execute(
+                select(TxAddrMapping.address).distinct().filter(TxScriptMapping.address.in_(addresses))
+            )
+            addresses_used = set(result.scalars().all())
 
-        non_active_addresses = await s.execute(query, params)
-
-    non_active_addresses = [x[0] for x in non_active_addresses.all()]
     return [
-        TxIdResponse(address=address, active=(address.split(":")[1] not in non_active_addresses))
+        TxIdResponse(address=address, active=(address in addresses_used))
         for address in addresses_active_request.addresses
     ]
 
@@ -164,24 +185,46 @@ async def get_full_transactions_for_address_page(
     Get all transactions for a given address from database.
     And then get their related full transaction data
     """
-    query = (
-        select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
-        .filter(TxAddrMapping.address == kaspaAddress)
-        .limit(limit)
-    )
+    try:
+        script = to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
+    if USE_SCRIPT_FOR_ADDRESS:
+        query = (
+            select(TxScriptMapping.transaction_id, TxScriptMapping.block_time)
+            .filter(TxScriptMapping.script_public_key == script)
+            .limit(limit)
+        )
+    else:
+        query = (
+            select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
+            .filter(TxAddrMapping.address == kaspaAddress)
+            .limit(limit)
+        )
+
     response.headers["X-Page-Count"] = "0"
     if before != 0 and after != 0:
         raise HTTPException(status_code=400, detail="Only one of [before, after] can be present")
     elif before != 0:
         if before <= 1636298787842:  # genesis block_time
             return []
-        query = query.filter(TxAddrMapping.block_time < before).order_by(TxAddrMapping.block_time.desc())
+        if USE_SCRIPT_FOR_ADDRESS:
+            query = query.filter(TxScriptMapping.block_time < before).order_by(TxScriptMapping.block_time.desc())
+        else:
+            query = query.filter(TxAddrMapping.block_time < before).order_by(TxAddrMapping.block_time.desc())
     elif after != 0:
         if after > int(time.time() * 1000) + 3600000:  # now + 1 hour
             return []
-        query = query.filter(TxAddrMapping.block_time > after).order_by(TxAddrMapping.block_time.asc())
+        if USE_SCRIPT_FOR_ADDRESS:
+            query = query.filter(TxScriptMapping.block_time > after).order_by(TxScriptMapping.block_time.asc())
+        else:
+            query = query.filter(TxAddrMapping.block_time > after).order_by(TxAddrMapping.block_time.asc())
     else:
-        query = query.order_by(TxAddrMapping.block_time.desc())
+        if USE_SCRIPT_FOR_ADDRESS:
+            query = query.order_by(TxScriptMapping.block_time.desc())
+        else:
+            query = query.order_by(TxAddrMapping.block_time.desc())
 
     async with async_session() as s:
         tx_within_limit_before = await s.execute(query)
@@ -196,13 +239,27 @@ async def get_full_transactions_for_address_page(
         tx_ids = {tx_id for tx_id, block_time in tx_ids_and_block_times}
         if len(tx_ids_and_block_times) == limit:
             # To avoid gaps when transactions with the same block_time are at the intersection between pages.
-            tx_with_same_block_time = await s.execute(
-                select(TxAddrMapping.transaction_id)
-                .filter(TxAddrMapping.address == kaspaAddress)
-                .filter(
-                    or_(TxAddrMapping.block_time == newest_block_time, TxAddrMapping.block_time == oldest_block_time)
+            if USE_SCRIPT_FOR_ADDRESS:
+                tx_with_same_block_time = await s.execute(
+                    select(TxScriptMapping.transaction_id)
+                    .filter(TxScriptMapping.script_public_key == script)
+                    .filter(
+                        or_(
+                            TxScriptMapping.block_time == newest_block_time,
+                            TxScriptMapping.block_time == oldest_block_time,
+                        )
+                    )
                 )
-            )
+            else:
+                tx_with_same_block_time = await s.execute(
+                    select(TxAddrMapping.transaction_id)
+                    .filter(TxAddrMapping.address == kaspaAddress)
+                    .filter(
+                        or_(
+                            TxAddrMapping.block_time == newest_block_time, TxAddrMapping.block_time == oldest_block_time
+                        )
+                    )
+                )
             tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
 
     response.headers["X-Page-Count"] = str(len(tx_ids))
@@ -231,15 +288,30 @@ async def get_transaction_count_for_address(
     """
     Count the number of transactions associated with this address
     """
+    try:
+        script = to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
     async with async_session() as s:
         if DISABLE_LIMITS:
-            result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspaAddress))
+            if USE_SCRIPT_FOR_ADDRESS:
+                result = await s.execute(select(func.count()).filter(TxScriptMapping.script_public_key == script))
+            else:
+                result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspaAddress))
         else:
-            result = await s.execute(
-                select(func.count()).select_from(
-                    select(1).filter(TxAddrMapping.address == kaspaAddress).limit(100001).subquery()
+            if USE_SCRIPT_FOR_ADDRESS:
+                result = await s.execute(
+                    select(func.count()).select_from(
+                        select(1).filter(TxScriptMapping.script_public_key == script).limit(100001).subquery()
+                    )
                 )
-            )
+            else:
+                result = await s.execute(
+                    select(func.count()).select_from(
+                        select(1).filter(TxAddrMapping.address == kaspaAddress).limit(100001).subquery()
+                    )
+                )
         tx_count = result.scalar()
         limit_exceeded = False
         ttl = 8
@@ -272,6 +344,11 @@ async def get_name_for_address(
     """
     Get the name for an address
     """
+    try:
+        to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
     async with async_session() as s:
         r = (await s.execute(select(AddressKnown).filter(AddressKnown.address == kaspaAddress))).first()
 

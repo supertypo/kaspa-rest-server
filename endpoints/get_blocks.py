@@ -350,7 +350,7 @@ async def get_transactions(blockId, transactionIds):
                 "outputs": [
                     {
                         "amount": tx_out.amount,
-                        "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key},
+                        "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key, "version": 0},
                         "verboseData": {
                             "scriptPublicKeyType": tx_out.script_public_key_type,
                             "scriptPublicKeyAddress": tx_out.script_public_key_address,
@@ -369,6 +369,7 @@ async def get_transactions(blockId, transactionIds):
                     "blockTime": tx.block_time,
                 },
                 "mass": tx.mass,
+                "version": 0,
             }
         )
     return tx_list

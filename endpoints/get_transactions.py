@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List
 
 from fastapi import Path, HTTPException, Query
-from pydantic import BaseModel, parse_obj_as
+from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.future import select
 
@@ -152,23 +152,19 @@ async def get_transaction(
 
                     if inputs and resolve_previous_outpoints not in ["light", "full"]:
                         tx_inputs = await session.execute(
-                            select(TransactionInput).filter(TransactionInput.transaction_id == transactionId)
+                            select(TransactionInput)
+                            .filter(TransactionInput.transaction_id == transactionId)
+                            .order_by(TransactionInput.index)
                         )
-                        tx_inputs = tx_inputs.scalars().all()
-                        transaction["inputs"] = (
-                            parse_obj_as(List[TxInput], sorted(tx_inputs, key=lambda x: x.index)) if tx_inputs else None
-                        )
+                        transaction["inputs"] = tx_inputs.scalars().all()
 
                     if outputs:
                         tx_outputs = await session.execute(
-                            select(TransactionOutput).filter(TransactionOutput.transaction_id == transactionId)
+                            select(TransactionOutput)
+                            .filter(TransactionOutput.transaction_id == transactionId)
+                            .order_by(TransactionOutput.index)
                         )
-                        tx_outputs = tx_outputs.scalars().all()
-                        transaction["outputs"] = (
-                            parse_obj_as(List[TxOutput], sorted(tx_outputs, key=lambda x: x.index))
-                            if tx_outputs
-                            else None
-                        )
+                        transaction["outputs"] = tx_outputs.scalars().all()
 
             if transaction:
                 accepted_transaction_id, accepting_block_hash = (
@@ -208,6 +204,7 @@ async def get_transaction(
                             & (TransactionOutput.index == TransactionInput.previous_outpoint_index),
                         )
                         .filter(TransactionInput.transaction_id == transactionId)
+                        .order_by(TransactionInput.index)
                     )
                     tx_inputs = tx_inputs.all()
 
@@ -218,10 +215,7 @@ async def get_transaction(
                             if resolve_previous_outpoints == "full":
                                 tx_in.previous_outpoint_resolved = tx_prev_output
 
-                    tx_inputs = [x[0] for x in tx_inputs]
-                    transaction["inputs"] = (
-                        parse_obj_as(List[TxInput], sorted(tx_inputs, key=lambda x: x.index)) if tx_inputs else None
-                    )
+                    transaction["inputs"] = [x[0] for x in tx_inputs]
 
     if transaction:
         return transaction
@@ -406,8 +400,8 @@ async def search_for_transactions(
                 "accepting_block_hash": tx.accepting_block_hash,
                 "accepting_block_blue_score": accepting_block_blue_score,
                 "accepting_block_time": accepting_block_time,
-                "outputs": tx_outputs.get(tx.Transaction.transaction_id),
-                "inputs": tx_inputs.get(tx.Transaction.transaction_id),
+                "outputs": tx_outputs.get(tx.Transaction.transaction_id) or [],
+                "inputs": tx_inputs.get(tx.Transaction.transaction_id) or [],
             },
             fields,
         )
