@@ -30,7 +30,12 @@ class UtxoResponse(BaseModel):
     utxoEntry: UtxoModel
 
 
-@app.get("/addresses/{kaspaAddress}/utxos", response_model=List[UtxoResponse], tags=["Kaspa addresses"])
+@app.get(
+    "/addresses/{kaspaAddress}/utxos",
+    response_model=List[UtxoResponse],
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
 async def get_utxos_for_address(
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
 ):
@@ -51,7 +56,12 @@ class UtxoRequest(BaseModel):
     addresses: list[str] = [ADDRESS_EXAMPLE]
 
 
-@app.post("/addresses/utxos", response_model=List[UtxoResponse], tags=["Kaspa addresses"])
+@app.post(
+    "/addresses/utxos",
+    response_model=List[UtxoResponse],
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
 async def get_utxos_for_addresses(body: UtxoRequest):
     """
     Lists all open utxo for a given kaspa address
