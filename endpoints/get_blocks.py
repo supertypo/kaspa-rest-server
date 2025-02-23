@@ -92,7 +92,7 @@ async def get_block(
     """
     resp = await kaspad_client.request("getBlockRequest", params={"hash": blockId, "includeTransactions": True})
     block = None
-    if "block" in resp["getBlockResponse"]:
+    if not resp.get("getBlockResponse", {}).get("block", {}).get("verboseData", {}).get("isHeaderOnly", True):
         logging.debug(f"Found block {blockId} in kaspad")
         block = resp["getBlockResponse"]["block"]
 
@@ -104,9 +104,10 @@ async def get_block(
                 block["extra"]["color"] = await get_block_color_from_kaspad(block)
 
         miner_payload = get_miner_payload_from_block(block)
-        miner_info, miner_address = retrieve_miner_info_from_payload(miner_payload)
-        block["extra"]["minerInfo"] = miner_info
-        block["extra"]["minerAddress"] = miner_address
+        if miner_payload:
+            miner_info, miner_address = retrieve_miner_info_from_payload(miner_payload)
+            block["extra"]["minerInfo"] = miner_info
+            block["extra"]["minerAddress"] = miner_address
 
         if not includeTransactions:
             block["transactions"] = None
@@ -350,7 +351,7 @@ async def get_transactions(blockId, transactionIds):
                 "outputs": [
                     {
                         "amount": tx_out.amount,
-                        "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key},
+                        "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key, "version": 0},
                         "verboseData": {
                             "scriptPublicKeyType": tx_out.script_public_key_type,
                             "scriptPublicKeyAddress": tx_out.script_public_key_address,
@@ -369,6 +370,7 @@ async def get_transactions(blockId, transactionIds):
                     "blockTime": tx.block_time,
                 },
                 "mass": tx.mass,
+                "version": 0,
             }
         )
     return tx_list

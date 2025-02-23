@@ -1,7 +1,9 @@
 # encoding: utf-8
+import re
 from typing import List
 
 from fastapi import Path, HTTPException
+from kaspa_script_address import to_script
 from pydantic import BaseModel
 
 from constants import REGEX_KASPA_ADDRESS, ADDRESS_EXAMPLE
@@ -37,6 +39,11 @@ async def get_utxos_for_address(
     """
     Lists all open utxo for a given kaspa address
     """
+    try:
+        to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
     resp = await kaspad_client.request("getUtxosByAddressesRequest", params={"addresses": [kaspaAddress]}, timeout=120)
     try:
         if "getUtxosByAddressesResponse" in resp and "error" in resp["getUtxosByAddressesResponse"]:
@@ -56,6 +63,17 @@ async def get_utxos_for_addresses(body: UtxoRequest):
     """
     Lists all open utxo for a given kaspa address
     """
+    if body.addresses is None:
+        return []
+
+    for kaspaAddress in body.addresses:
+        try:
+            if not re.search(REGEX_KASPA_ADDRESS, kaspaAddress):
+                raise ValueError
+            to_script(kaspaAddress)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
     resp = await kaspad_client.request("getUtxosByAddressesRequest", params={"addresses": body.addresses}, timeout=120)
     try:
         if "getUtxosByAddressesResponse" in resp and "error" in resp["getUtxosByAddressesResponse"]:

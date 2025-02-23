@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, BigInteger, SmallInteger
 
+from kaspa_script_address import to_address
+from constants import ADDRESS_PREFIX
 from dbsession import Base
 from helper.PublicKeyType import get_public_key_type
 from models.AddressColumn import AddressColumn
@@ -22,7 +24,13 @@ class TransactionOutput(Base):
     index = Column(SmallInteger, primary_key=True)
     amount = Column(BigInteger)
     script_public_key = Column(HexColumn)
-    script_public_key_address = Column(AddressColumn)
+    _script_public_key_address = Column("script_public_key_address", AddressColumn)
+
+    @property
+    def script_public_key_address(self):
+        if not self._script_public_key_address:
+            return to_address(ADDRESS_PREFIX, self.script_public_key)
+        return self._script_public_key_address
 
     @property
     def script_public_key_type(self):
