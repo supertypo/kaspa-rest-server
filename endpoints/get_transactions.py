@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.future import select
 
+from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT
 from dbsession import async_session, async_session_blocks
 from endpoints import filter_fields, sql_db_only
 from models.Block import Block
@@ -75,10 +76,14 @@ class TxModel(BaseModel):
         orm_mode = True
 
 
+class TxSearchAcceptingBlueScores(BaseModel):
+    gte: int
+    lt: int
+
+
 class TxSearch(BaseModel):
     transactionIds: List[str] | None
-    acceptingBlueScoreGte: int | None
-    acceptingBlueScoreLt: int | None
+    acceptingBlueScores: TxSearchAcceptingBlueScores | None
 
 
 class PreviousOutpointLookupMode(str, Enum):
@@ -239,23 +244,24 @@ async def search_for_transactions(
     """
     Search for transactions by transaction_ids or blue_score
     """
-    if txSearch.transactionIds and len(txSearch.transactionIds) > 1000:
-        raise HTTPException(422, "Too many transaction ids")
-
-    if not txSearch.transactionIds and not txSearch.acceptingBlueScoreLt and not txSearch.acceptingBlueScoreGte:
+    if not txSearch.transactionIds and not txSearch.acceptingBlueScores:
         return []
 
-    if txSearch.transactionIds and (txSearch.acceptingBlueScoreGte or txSearch.acceptingBlueScoreLt):
-        raise HTTPException(400, "Only one of transactionIds and acceptingBlueScoreGte/Lt must be non null")
+    if txSearch.transactionIds and len(txSearch.transactionIds) > TX_SEARCH_ID_LIMIT:
+        raise HTTPException(422, f"Too many transaction ids. Max {TX_SEARCH_ID_LIMIT}")
 
-    if txSearch.acceptingBlueScoreLt and not txSearch.acceptingBlueScoreGte:
-        txSearch.acceptingBlueScoreGte = txSearch.acceptingBlueScoreLt - 100
-    elif txSearch.acceptingBlueScoreGte and not txSearch.acceptingBlueScoreLt:
-        txSearch.acceptingBlueScoreLt = txSearch.acceptingBlueScoreGte + 100
-    if txSearch.acceptingBlueScoreLt and txSearch.acceptingBlueScoreLt - txSearch.acceptingBlueScoreGte > 100:
-        raise HTTPException(
-            400, "Diff between acceptingBlueScoreBefore and acceptingBlueScoreAfter must be equal or less than 100"
-        )
+    if txSearch.transactionIds and txSearch.acceptingBlueScores:
+        raise HTTPException(422, "Only one of transactionIds and acceptingBlueScores must be non-null")
+
+    if (
+        txSearch.acceptingBlueScores
+        and txSearch.acceptingBlueScores.lt - txSearch.acceptingBlueScores.gte > TX_SEARCH_BS_LIMIT
+    ):
+        raise HTTPException(400, f"Diff between acceptingBlueScores.gte and lt must be <= {TX_SEARCH_BS_LIMIT}")
+
+    transaction_ids = set(txSearch.transactionIds)
+    accepting_blue_score_gte = txSearch.acceptingBlueScores.gte if txSearch.acceptingBlueScores else None
+    accepting_blue_score_lt = txSearch.acceptingBlueScores.lt if txSearch.acceptingBlueScores else None
 
     fields = fields.split(",") if fields else []
 
@@ -272,7 +278,7 @@ async def search_for_transactions(
                 .outerjoin(TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id)
             )
 
-            if txSearch.acceptingBlueScoreGte:
+            if accepting_blue_score_gte:
                 tx_acceptances = await session_blocks.execute(
                     select(
                         Block.hash.label("accepting_block_hash"),
@@ -280,8 +286,8 @@ async def search_for_transactions(
                         Block.timestamp.label("accepting_block_time"),
                     )
                     .filter(exists().where(TransactionAcceptance.block_hash == Block.hash))  # Only chain blocks
-                    .filter(Block.blue_score >= txSearch.acceptingBlueScoreGte)
-                    .filter(Block.blue_score < txSearch.acceptingBlueScoreLt)
+                    .filter(Block.blue_score >= accepting_blue_score_gte)
+                    .filter(Block.blue_score < accepting_blue_score_lt)
                 )
                 tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
                 if not tx_acceptances:
@@ -290,11 +296,10 @@ async def search_for_transactions(
                 tx_list = (await session.execute(tx_query)).all()
                 transaction_ids = [row.Transaction.transaction_id for row in tx_list]
             else:
-                tx_query = tx_query.filter(Transaction.transaction_id.in_(txSearch.transactionIds))
+                tx_query = tx_query.filter(Transaction.transaction_id.in_(transaction_ids))
                 tx_list = (await session.execute(tx_query)).all()
                 if not tx_list:
                     return []
-                transaction_ids = txSearch.transactionIds
                 accepting_block_hashes = [
                     row.accepting_block_hash for row in tx_list if row.accepting_block_hash is not None
                 ]

@@ -3,6 +3,9 @@ import os
 DISABLE_LIMITS = os.getenv("DISABLE_LIMITS", "false").lower() == "true"
 USE_SCRIPT_FOR_ADDRESS = os.getenv("USE_SCRIPT_FOR_ADDRESS", "false").lower() == "true"
 
+TX_SEARCH_ID_LIMIT = int(os.getenv("TX_SEARCH_ID_LIMIT", "1000"))
+TX_SEARCH_BS_LIMIT = int(os.getenv("TX_SEARCH_BS_LIMIT", "100"))
+
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = int(os.getenv("BPS", "1"))
 
