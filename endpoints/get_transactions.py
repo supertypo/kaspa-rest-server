@@ -242,14 +242,11 @@ async def search_for_transactions(
     if txSearch.transactionIds and len(txSearch.transactionIds) > 1000:
         raise HTTPException(422, "Too many transaction ids")
 
-    if (
-        not txSearch.transactionIds
-        and not txSearch.acceptingBlueScoreLt
-        and not txSearch.acceptingBlueScoreGte
-        or txSearch.transactionIds
-        and (txSearch.acceptingBlueScoreGte or txSearch.acceptingBlueScoreLt)
-    ):
-        raise HTTPException(400, "Exactly one of transactionIds and acceptingBlueScoreAfter must be non null")
+    if not txSearch.transactionIds and not txSearch.acceptingBlueScoreLt and not txSearch.acceptingBlueScoreGte:
+        return []
+
+    if txSearch.transactionIds and (txSearch.acceptingBlueScoreGte or txSearch.acceptingBlueScoreLt):
+        raise HTTPException(400, "Only one of transactionIds and acceptingBlueScoreGte/Lt must be non null")
 
     if txSearch.acceptingBlueScoreLt and not txSearch.acceptingBlueScoreGte:
         txSearch.acceptingBlueScoreGte = txSearch.acceptingBlueScoreLt - 100
