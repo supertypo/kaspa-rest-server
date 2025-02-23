@@ -259,7 +259,7 @@ async def search_for_transactions(
     ):
         raise HTTPException(400, f"Diff between acceptingBlueScores.gte and lt must be <= {TX_SEARCH_BS_LIMIT}")
 
-    transaction_ids = set(txSearch.transactionIds)
+    transaction_ids = set(txSearch.transactionIds or [])
     accepting_blue_score_gte = txSearch.acceptingBlueScores.gte if txSearch.acceptingBlueScores else None
     accepting_blue_score_lt = txSearch.acceptingBlueScores.lt if txSearch.acceptingBlueScores else None
 
