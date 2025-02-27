@@ -161,7 +161,7 @@ async def get_transaction(
                             .filter(TransactionInput.transaction_id == transactionId)
                             .order_by(TransactionInput.index)
                         )
-                        transaction["inputs"] = tx_inputs.scalars().all()
+                        transaction["inputs"] = tx_inputs.scalars().all() or None
 
                     if outputs:
                         tx_outputs = await session.execute(
@@ -220,7 +220,7 @@ async def get_transaction(
                             if resolve_previous_outpoints == "full":
                                 tx_in.previous_outpoint_resolved = tx_prev_output
 
-                    transaction["inputs"] = [x[0] for x in tx_inputs]
+                    transaction["inputs"] = [x[0] for x in tx_inputs] or None
 
     if transaction:
         return transaction
@@ -404,7 +404,7 @@ async def search_for_transactions(
                 "accepting_block_blue_score": accepting_block_blue_score,
                 "accepting_block_time": accepting_block_time,
                 "outputs": tx_outputs.get(tx.Transaction.transaction_id) or [],
-                "inputs": tx_inputs.get(tx.Transaction.transaction_id) or [],
+                "inputs": tx_inputs.get(tx.Transaction.transaction_id),
             },
             fields,
         )
