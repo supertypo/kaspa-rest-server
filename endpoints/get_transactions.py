@@ -9,10 +9,12 @@ from fastapi import Path, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.future import select
+from starlette.responses import Response
 
 from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT
 from dbsession import async_session, async_session_blocks
 from endpoints import filter_fields, sql_db_only
+from helper.utils import add_cache_control
 from models.Block import Block
 from models.BlockTransaction import BlockTransaction
 from models.Subnetwork import Subnetwork
@@ -100,6 +102,7 @@ class PreviousOutpointLookupMode(str, Enum):
 )
 @sql_db_only
 async def get_transaction(
+    response: Response,
     transactionId: str = Path(regex="[a-f0-9]{64}"),
     blockHash: str = Query(None, description="Specify a containing block (if known) for faster lookup"),
     inputs: bool = True,
@@ -223,6 +226,7 @@ async def get_transaction(
                     transaction["inputs"] = [x[0] for x in tx_inputs] or None
 
     if transaction:
+        add_cache_control(transaction["accepting_block_blue_score"], transaction["block_time"], response)
         return transaction
     else:
         raise HTTPException(

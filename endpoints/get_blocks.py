@@ -1,7 +1,6 @@
 # encoding: utf-8
-import os
-import time
 import logging
+import os
 from typing import List
 
 from fastapi import Query, Path, HTTPException
@@ -10,9 +9,9 @@ from pydantic import BaseModel
 from sqlalchemy import select, exists, func
 
 from dbsession import async_session, async_session_blocks
-from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.difficulty_calculation import bits_to_difficulty
 from helper.mining_address import get_miner_payload_from_block, retrieve_miner_info_from_payload
+from helper.utils import add_cache_control
 from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
@@ -124,7 +123,10 @@ async def get_block(
                     else:
                         block["extra"] = {"color": await get_block_color_from_db(block)}
 
-    add_cache_control_for_block(block, response)
+    if not block:
+        raise HTTPException(status_code=404, detail="Block not found", headers={"Cache-Control": "public, max-age=8"})
+
+    add_cache_control(block.get("header", {}).get("blueScore"), block.get("header", {}).get("timestamp"), response)
     return block
 
 
@@ -154,14 +156,13 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
     """
     response.headers["X-Data-Source"] = "Database"
 
-    if blueScore > current_blue_score_data["blue_score"] - 20:
-        response.headers["Cache-Control"] = "no-store"
-
     async with async_session_blocks() as s:
         blocks = (await s.execute(block_join_query().where(Block.blue_score == blueScore))).all()
 
     result = []
     for block, is_chain_block, parents, children, transaction_ids in blocks:
+        if block:
+            add_cache_control(block.blue_score, block.timestamp, response)
         transactions = await get_transactions(block.hash, transaction_ids) if includeTransactions else None
         result.append(map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions))
 
@@ -272,26 +273,6 @@ def block_join_query():
         .where(BlockTransaction.block_hash == Block.hash)
         .scalar_subquery(),
     )
-
-
-def add_cache_control_for_block(block, response):
-    if not block:
-        raise HTTPException(status_code=404, detail="Block not found", headers={"Cache-Control": "public, max-age=3"})
-    if block["header"]["blueScore"] is None:
-        if int(block["header"]["timestamp"]) / 1000 > int(time.time()) - 60:
-            response.headers["Cache-Control"] = "public, max-age=2"
-        elif int(block["header"]["timestamp"]) / 1000 > int(time.time()) - 600:
-            response.headers["Cache-Control"] = "public, max-age=60"
-        else:
-            response.headers["Cache-Control"] = "public, max-age=600"
-    elif int(block["header"]["blueScore"]) > current_blue_score_data["blue_score"] - 20:
-        response.headers["Cache-Control"] = "public, max-age=2"
-    elif int(block["header"]["blueScore"]) > current_blue_score_data["blue_score"] - 60:
-        response.headers["Cache-Control"] = "public, max-age=10"
-    elif int(block["header"]["blueScore"]) > current_blue_score_data["blue_score"] - 600:
-        response.headers["Cache-Control"] = "public, max-age=60"
-    else:
-        response.headers["Cache-Control"] = "public, max-age=600"
 
 
 async def get_transactions(blockId, transactionIds):
