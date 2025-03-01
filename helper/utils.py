@@ -1,15 +1,16 @@
 import time
 
+from constants import BPS
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 
 
 def add_cache_control(blue_score, timestamp, response):
     if blue_score and current_blue_score_data["blue_score"] > 0:
-        if int(blue_score) > current_blue_score_data["blue_score"] - 20:
+        if int(blue_score) > current_blue_score_data["blue_score"] - 20 * BPS:
             response.headers["Cache-Control"] = "public, max-age=2"
-        elif int(blue_score) > current_blue_score_data["blue_score"] - 60:
+        elif int(blue_score) > current_blue_score_data["blue_score"] - 60 * BPS:
             response.headers["Cache-Control"] = "public, max-age=10"
-        elif int(blue_score) > current_blue_score_data["blue_score"] - 600:
+        elif int(blue_score) > current_blue_score_data["blue_score"] - 600 * BPS:
             response.headers["Cache-Control"] = "public, max-age=60"
         else:
             response.headers["Cache-Control"] = "public, max-age=600"
