@@ -226,7 +226,7 @@ async def get_transaction(
                     transaction["inputs"] = [x[0] for x in tx_inputs] or None
 
     if transaction:
-        add_cache_control(transaction["accepting_block_blue_score"], transaction["block_time"], response)
+        add_cache_control(transaction.get("accepting_block_blue_score"), transaction.get("block_time"), response)
         return transaction
     else:
         raise HTTPException(
