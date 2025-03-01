@@ -834,6 +834,7 @@ groups = ["main"]
 files = [
     {file = "kaspa_script_address-0.0.1-cp310-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:f0af75d2fe4b951e41801117656045079a504b9b3599a126155e4877b3f31a72"},
     {file = "kaspa_script_address-0.0.1-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:a5661a9cdf74b020919d91d482b0279624db31e0a2523d70f16426c8146801b8"},
+    {file = "kaspa_script_address-0.0.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:d366461bc7bfb068fb8a03a360dcc1d150122aa03f2f2a67e6c4da7d025b9a59"},
     {file = "kaspa_script_address-0.0.1.tar.gz", hash = "sha256:f14b81ac1f31edaa1480ac11e659e0a51ebf74d1d68e29af96ab25c0a4f34777"},
 ]
 
