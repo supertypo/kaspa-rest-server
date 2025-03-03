@@ -172,7 +172,7 @@ async def get_transaction(
                             .filter(TransactionOutput.transaction_id == transactionId)
                             .order_by(TransactionOutput.index)
                         )
-                        transaction["outputs"] = tx_outputs.scalars().all()
+                        transaction["outputs"] = tx_outputs.scalars().all() or None
 
             if transaction:
                 accepted_transaction_id, accepting_block_hash = (
@@ -407,7 +407,7 @@ async def search_for_transactions(
                 "accepting_block_hash": tx.accepting_block_hash,
                 "accepting_block_blue_score": accepting_block_blue_score,
                 "accepting_block_time": accepting_block_time,
-                "outputs": tx_outputs.get(tx.Transaction.transaction_id) or [],
+                "outputs": tx_outputs.get(tx.Transaction.transaction_id),
                 "inputs": tx_inputs.get(tx.Transaction.transaction_id),
             },
             fields,
