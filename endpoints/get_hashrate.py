@@ -41,7 +41,7 @@ async def get_hashrate(stringOnly: bool = False):
     """
 
     resp = await kaspad_client.request("getBlockDagInfoRequest")
-    hashrate = resp["getBlockDagInfoResponse"]["difficulty"] * 2
+    hashrate = resp["getBlockDagInfoResponse"]["difficulty"] * 2 * BPS
     hashrate_in_th = hashrate / 1_000_000_000_000
 
     if not stringOnly:
