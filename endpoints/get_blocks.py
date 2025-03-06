@@ -163,7 +163,9 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
     for block, is_chain_block, parents, children, transaction_ids in blocks:
         if block:
             add_cache_control(block.blue_score, block.timestamp, response)
-        transactions = await get_transactions(block.hash, transaction_ids) if includeTransactions and transaction_ids else None
+        transactions = (
+            await get_transactions(block.hash, transaction_ids) if includeTransactions and transaction_ids else None
+        )
         result.append(map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions))
 
     return result
@@ -195,7 +197,9 @@ async def get_block_from_db(block_id, include_transactions):
             children = []
             transaction_ids = [row.transaction_id for row in result]
 
-    transactions = await get_transactions(block.hash, transaction_ids) if include_transactions and transaction_ids else None
+    transactions = (
+        await get_transactions(block.hash, transaction_ids) if include_transactions and transaction_ids else None
+    )
     return map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions)
 
 
