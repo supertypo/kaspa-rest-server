@@ -318,7 +318,7 @@ async def search_for_transactions(
                 tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
 
             async_tasks = [
-                get_tx_blocks_from_db(transaction_ids, session_blocks),
+                get_tx_blocks_from_db(fields, transaction_ids, session_blocks),
                 get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_ids, session),
                 get_tx_outputs_from_db(fields, transaction_ids, session),
             ]
@@ -364,11 +364,14 @@ async def search_for_transactions(
     return results
 
 
-async def get_tx_blocks_from_db(transaction_ids, session_blocks):
+async def get_tx_blocks_from_db(fields, transaction_ids, session_blocks):
+    tx_blocks_dict = defaultdict(list)
+    if fields and "block_hash" not in fields:
+        return tx_blocks_dict
+
     tx_blocks = await session_blocks.execute(
         select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(transaction_ids))
     )
-    tx_blocks_dict = defaultdict(list)
     for row in tx_blocks.scalars().all():
         tx_blocks_dict[row.transaction_id].append(row.block_hash)
     return tx_blocks_dict
