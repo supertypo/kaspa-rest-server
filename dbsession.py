@@ -25,5 +25,7 @@ if os.getenv("SQL_URI_BLOCKS"):
         echo=os.getenv("DEBUG") == "true",
     )
     async_session_blocks = sessionmaker(blocks_engine, expire_on_commit=False, class_=AsyncSession)
+    split_db = True
 else:
     async_session_blocks = async_session
+    split_db = False
