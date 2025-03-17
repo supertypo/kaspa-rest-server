@@ -218,8 +218,8 @@ async def get_transaction(
 
                     for tx_in, tx_prev_output in tx_inputs:
                         if tx_prev_output:
+                            tx_in.previous_outpoint_script = tx_prev_output.script_public_key
                             tx_in.previous_outpoint_amount = tx_prev_output.amount
-                            tx_in.previous_outpoint_address = tx_prev_output.script_public_key_address
                             if resolve_previous_outpoints == "full":
                                 tx_in.previous_outpoint_resolved = tx_prev_output
 
@@ -397,13 +397,13 @@ async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_
             )
             for tx_input, tx_prev_output in tx_inputs.all():
                 if tx_prev_output:
+                    tx_input.previous_outpoint_script = tx_prev_output.script_public_key
                     tx_input.previous_outpoint_amount = tx_prev_output.amount
-                    tx_input.previous_outpoint_address = tx_prev_output.script_public_key_address
                     if resolve_previous_outpoints == "full":
                         tx_input.previous_outpoint_resolved = tx_prev_output
                 else:
+                    tx_input.previous_outpoint_script = None
                     tx_input.previous_outpoint_amount = None
-                    tx_input.previous_outpoint_address = None
                     if resolve_previous_outpoints == "full":
                         tx_input.previous_outpoint_resolved = None
                 tx_inputs_dict[tx_input.transaction_id].append(tx_input)
