@@ -39,16 +39,6 @@ class TxIdResponse(BaseModel):
     active: bool
 
 
-class TransactionsReceivedAndSpent(BaseModel):
-    tx_received: str
-    tx_spent: str | None
-    # received_amount: int = 38240000000
-
-
-class TransactionForAddressResponse(BaseModel):
-    transactions: List[TransactionsReceivedAndSpent]
-
-
 class TransactionCount(BaseModel):
     total: int
     limit_exceeded: bool
@@ -63,30 +53,6 @@ class PreviousOutpointLookupMode(str, Enum):
     no = "no"
     light = "light"
     full = "full"
-
-
-@app.get(
-    "/addresses/{kaspaAddress}/full-transactions",
-    response_model=List[TxModel],
-    response_model_exclude_unset=True,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_full_transactions_for_address(
-    response: Response,
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
-    limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
-    offset: int = Query(description="The offset from which to get records", ge=0, default=0),
-    fields: str = "",
-    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
-):
-    """
-    DEPRECATED, ONLY RETURNS THE FIRST PAGE
-    """
-    return get_full_transactions_for_address_page(
-        response, kaspaAddress, limit, 0, 0, fields, resolve_previous_outpoints
-    )
 
 
 @app.post(
@@ -132,88 +98,6 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
         TxIdResponse(address=address, active=(to_script(address) in addresses_used))
         for address in addresses_active_request.addresses
     ]
-
-
-@app.get(
-    "/addresses/{kaspaAddress}/full-transactions-page",
-    response_model=List[TxModel],
-    response_model_exclude_unset=True,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_full_transactions_for_address_page(
-    response: Response,
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
-    limit: int = Query(
-        description="The max number of records to get. "
-        "For paging combine with using 'before/after' from oldest previous result. "
-        "Use value of X-Next-Page-Before/-After as long as header is present to continue paging. "
-        "The actual number of transactions returned for each page can be > limit.",
-        ge=1,
-        le=500,
-        default=50,
-    ),
-    before: int = Query(
-        description="Only include transactions with block time before this (epoch-millis)", ge=0, default=0
-    ),
-    after: int = Query(
-        description="Only include transactions with block time after this (epoch-millis)", ge=0, default=0
-    ),
-    fields: str = "",
-    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
-):
-    """
-    Get all transactions for a given address from database.
-    And then get their related full transaction data
-    """
-    try:
-        script = to_script(kaspaAddress)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
-
-    q_in = (
-        select(TransactionInput.transaction_id, TransactionInput.block_time)
-        .filter(TransactionInput.previous_outpoint_script == script)
-        .limit(limit)
-    )
-    q_out = (
-        select(TransactionOutput.transaction_id, TransactionOutput.block_time)
-        .filter(TransactionOutput.script_public_key == script)
-        .limit(limit)
-    )
-
-    response.headers["X-Page-Count"] = "0"
-    if before != 0 and after != 0:
-        raise HTTPException(status_code=400, detail="Only one of [before, after] can be present")
-    elif before != 0:
-        if before <= 1636298787842:  # genesis block_time
-            return []
-        q_in = q_in.filter(TransactionInput.block_time < before).order_by(TransactionInput.block_time.desc())
-        q_out = q_out.filter(TransactionOutput.block_time < before).order_by(TransactionOutput.block_time.desc())
-    elif after != 0:
-        if after > int(time.time() * 1000) + 3600000:  # now + 1 hour
-            return []
-        q_in = q_in.filter(TransactionInput.block_time > after).order_by(TransactionInput.block_time.asc())
-        q_out = q_out.filter(TransactionOutput.block_time > after).order_by(TransactionOutput.block_time.asc())
-    else:
-        q_in = q_in.order_by(TransactionInput.block_time.desc())
-        q_out = q_out.order_by(TransactionOutput.block_time.desc())
-
-    async with async_session() as s1, async_session() as s2:
-        result_inputs, result_outputs = await asyncio.gather(s1.execute(q_in), s2.execute(q_out))
-        results = {x.transaction_id: x.block_time for x in result_inputs.all() + result_outputs.all()}
-        results = sorted(results.items(), key=lambda item: item[1], reverse=(after == 0))[:limit]
-        newest_block_time = results[0][1]
-        oldest_block_time = results[-1][1]
-        tx_ids = [tx_id for tx_id, _ in results]
-
-    response.headers["X-Page-Count"] = str(len(tx_ids))
-    if len(tx_ids) >= limit:
-        response.headers["X-Next-Page-After"] = str(newest_block_time)
-        response.headers["X-Next-Page-Before"] = str(oldest_block_time)
-
-    return await search_for_transactions(TxSearch(transactionIds=tx_ids), fields, resolve_previous_outpoints)
 
 
 @app.get(
@@ -296,3 +180,111 @@ async def get_name_for_address(
         raise HTTPException(
             status_code=404, detail="Address name not found", headers={"Cache-Control": "public, max-age=600"}
         )
+
+
+@app.get(
+    "/addresses/{kaspaAddress}/full-transactions",
+    response_model=List[TxModel],
+    response_model_exclude_unset=True,
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
+@sql_db_only
+async def get_full_transactions_for_address(
+    response: Response,
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
+    offset: int = Query(description="The offset from which to get records", ge=0, default=0),
+    fields: str = "",
+    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
+):
+    """
+    DEPRECATED, ONLY RETURNS THE FIRST PAGE
+    """
+    if offset:
+        return []
+    return get_full_transactions_for_address_page(
+        response, kaspaAddress, limit, 0, 0, fields, resolve_previous_outpoints
+    )
+
+
+@app.get(
+    "/addresses/{kaspaAddress}/full-transactions-page",
+    response_model=List[TxModel],
+    response_model_exclude_unset=True,
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
+@sql_db_only
+async def get_full_transactions_for_address_page(
+    response: Response,
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    limit: int = Query(
+        description="The max number of records to get. "
+        "For paging combine with using 'before/after' from oldest previous result. "
+        "Use value of X-Next-Page-Before/-After as long as header is present to continue paging. "
+        "The actual number of transactions returned for each page can be > limit.",
+        ge=1,
+        le=500,
+        default=50,
+    ),
+    before: int = Query(
+        description="Only include transactions with block time before this (epoch-millis)", ge=0, default=0
+    ),
+    after: int = Query(
+        description="Only include transactions with block time after this (epoch-millis)", ge=0, default=0
+    ),
+    fields: str = "",
+    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
+):
+    """
+    Get all transactions for a given address from database.
+    And then get their related full transaction data
+    """
+    try:
+        script = to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
+    q_in = (
+        select(TransactionInput.transaction_id, TransactionInput.block_time)
+        .filter(TransactionInput.previous_outpoint_script == script)
+        .limit(limit)
+    )
+    q_out = (
+        select(TransactionOutput.transaction_id, TransactionOutput.block_time)
+        .filter(TransactionOutput.script_public_key == script)
+        .limit(limit)
+    )
+
+    response.headers["X-Page-Count"] = "0"
+    if before != 0 and after != 0:
+        raise HTTPException(status_code=400, detail="Only one of [before, after] can be present")
+    elif before != 0:
+        if before <= 1636298787842:  # genesis block_time
+            return []
+        q_in = q_in.filter(TransactionInput.block_time < before).order_by(TransactionInput.block_time.desc())
+        q_out = q_out.filter(TransactionOutput.block_time < before).order_by(TransactionOutput.block_time.desc())
+    elif after != 0:
+        if after > int(time.time() * 1000) + 3600000:  # now + 1 hour
+            return []
+        q_in = q_in.filter(TransactionInput.block_time > after).order_by(TransactionInput.block_time.asc())
+        q_out = q_out.filter(TransactionOutput.block_time > after).order_by(TransactionOutput.block_time.asc())
+    else:
+        q_in = q_in.order_by(TransactionInput.block_time.desc())
+        q_out = q_out.order_by(TransactionOutput.block_time.desc())
+
+    async with async_session() as s1, async_session() as s2:
+        result_inputs, result_outputs = await asyncio.gather(s1.execute(q_in), s2.execute(q_out))
+        results = {x.transaction_id: x.block_time for x in result_inputs.all() + result_outputs.all()}
+        results = sorted(results.items(), key=lambda item: item[1], reverse=(after == 0))[:limit]
+        newest_block_time = results[0][1]
+        oldest_block_time = results[-1][1]
+        tx_ids = [tx_id for tx_id, _ in results]
+
+    response.headers["X-Page-Count"] = str(len(tx_ids))
+    if len(tx_ids) >= limit:
+        response.headers["X-Next-Page-After"] = str(newest_block_time)
+        response.headers["X-Next-Page-Before"] = str(oldest_block_time)
+
+    return await search_for_transactions(TxSearch(transactionIds=tx_ids), fields, resolve_previous_outpoints)
