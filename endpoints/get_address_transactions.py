@@ -203,7 +203,7 @@ async def get_full_transactions_for_address(
     """
     if offset:
         return []
-    return get_full_transactions_for_address_page(
+    return await get_full_transactions_for_address_page(
         response, kaspaAddress, limit, 0, 0, fields, resolve_previous_outpoints
     )
 
@@ -277,6 +277,8 @@ async def get_full_transactions_for_address_page(
     async with async_session() as s1, async_session() as s2:
         result_inputs, result_outputs = await asyncio.gather(s1.execute(q_in), s2.execute(q_out))
         results = {x.transaction_id: x.block_time for x in result_inputs.all() + result_outputs.all()}
+        if not results:
+            return []
         results = sorted(results.items(), key=lambda item: item[1], reverse=(after == 0))[:limit]
         newest_block_time = results[0][1]
         oldest_block_time = results[-1][1]
