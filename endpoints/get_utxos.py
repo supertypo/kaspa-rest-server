@@ -5,6 +5,7 @@ from typing import List
 from fastapi import Path, HTTPException
 from kaspa_script_address import to_script
 from pydantic import BaseModel
+from starlette.responses import Response
 
 from constants import REGEX_KASPA_ADDRESS, ADDRESS_EXAMPLE
 from server import app, kaspad_client
@@ -32,8 +33,14 @@ class UtxoResponse(BaseModel):
     utxoEntry: UtxoModel
 
 
-@app.get("/addresses/{kaspaAddress}/utxos", response_model=List[UtxoResponse], tags=["Kaspa addresses"])
+@app.get(
+    "/addresses/{kaspaAddress}/utxos",
+    response_model=List[UtxoResponse],
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
 async def get_utxos_for_address(
+    response: Response,
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
 ):
     """
@@ -49,6 +56,15 @@ async def get_utxos_for_address(
         if "getUtxosByAddressesResponse" in resp and "error" in resp["getUtxosByAddressesResponse"]:
             raise HTTPException(status_code=400, detail=resp["getUtxosByAddressesResponse"]["error"])
 
+        ttl = 8
+        if len(resp["getUtxosByAddressesResponse"]["entries"]) > 100_000:
+            ttl = 3600
+        elif len(resp["getUtxosByAddressesResponse"]["entries"]) > 10_000:
+            ttl = 600
+        elif len(resp["getUtxosByAddressesResponse"]["entries"]) > 1_000:
+            ttl = 20
+
+        response.headers["Cache-Control"] = f"public, max-age={ttl}"
         return (utxo for utxo in resp["getUtxosByAddressesResponse"]["entries"] if utxo["address"] == kaspaAddress)
     except KeyError:
         return []
@@ -58,7 +74,12 @@ class UtxoRequest(BaseModel):
     addresses: list[str] = [ADDRESS_EXAMPLE]
 
 
-@app.post("/addresses/utxos", response_model=List[UtxoResponse], tags=["Kaspa addresses"])
+@app.post(
+    "/addresses/utxos",
+    response_model=List[UtxoResponse],
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
 async def get_utxos_for_addresses(body: UtxoRequest):
     """
     Lists all open utxo for a given kaspa address
