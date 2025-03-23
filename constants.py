@@ -5,6 +5,7 @@ USE_SCRIPT_FOR_ADDRESS = os.getenv("USE_SCRIPT_FOR_ADDRESS", "false").lower() ==
 
 TX_SEARCH_ID_LIMIT = int(os.getenv("TX_SEARCH_ID_LIMIT", "1000"))
 TX_SEARCH_BS_LIMIT = int(os.getenv("TX_SEARCH_BS_LIMIT", "100"))
+HEALTH_TOLERANCE_DOWN = int(os.getenv("HEALTH_TOLERANCE_DOWN", "300"))
 
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = int(os.getenv("BPS", "1"))
