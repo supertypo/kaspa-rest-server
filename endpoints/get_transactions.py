@@ -11,7 +11,7 @@ from sqlalchemy import exists
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT
+from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT, PREV_OUT_RESOLVED
 from dbsession import async_session, async_session_blocks
 from endpoints import filter_fields, sql_db_only
 from helper.utils import add_cache_control
@@ -218,8 +218,8 @@ async def get_transaction(
 
                     for tx_in, tx_prev_output in tx_inputs:
                         if tx_prev_output:
+                            tx_in.previous_outpoint_script = tx_prev_output.script_public_key
                             tx_in.previous_outpoint_amount = tx_prev_output.amount
-                            tx_in.previous_outpoint_address = tx_prev_output.script_public_key_address
                             if resolve_previous_outpoints == "full":
                                 tx_in.previous_outpoint_resolved = tx_prev_output
 
@@ -384,7 +384,7 @@ async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_
         return tx_inputs_dict
 
     async with async_session() as session:
-        if resolve_previous_outpoints in ["light", "full"]:
+        if resolve_previous_outpoints == "light" and not PREV_OUT_RESOLVED or resolve_previous_outpoints == "full":
             tx_inputs = await session.execute(
                 select(TransactionInput, TransactionOutput)
                 .outerjoin(
@@ -397,13 +397,13 @@ async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_
             )
             for tx_input, tx_prev_output in tx_inputs.all():
                 if tx_prev_output:
+                    tx_input.previous_outpoint_script = tx_prev_output.script_public_key
                     tx_input.previous_outpoint_amount = tx_prev_output.amount
-                    tx_input.previous_outpoint_address = tx_prev_output.script_public_key_address
                     if resolve_previous_outpoints == "full":
                         tx_input.previous_outpoint_resolved = tx_prev_output
                 else:
+                    tx_input.previous_outpoint_script = None
                     tx_input.previous_outpoint_amount = None
-                    tx_input.previous_outpoint_address = None
                     if resolve_previous_outpoints == "full":
                         tx_input.previous_outpoint_resolved = None
                 tx_inputs_dict[tx_input.transaction_id].append(tx_input)
