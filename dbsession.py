@@ -15,7 +15,12 @@ primary_engine = create_async_engine(
     connect_args={"server_settings": {"enable_seqscan": "off"}},
     echo=os.getenv("DEBUG") == "true",
 )
-async_session = sessionmaker(primary_engine, expire_on_commit=False, class_=AsyncSession)
+async_session_factory = sessionmaker(primary_engine, expire_on_commit=False, class_=AsyncSession)
+
+
+def async_session():
+    return async_session_factory()
+
 
 if os.getenv("SQL_URI_BLOCKS"):
     blocks_engine = create_async_engine(
@@ -24,6 +29,9 @@ if os.getenv("SQL_URI_BLOCKS"):
         connect_args={"server_settings": {"enable_seqscan": "off"}},
         echo=os.getenv("DEBUG") == "true",
     )
-    async_session_blocks = sessionmaker(blocks_engine, expire_on_commit=False, class_=AsyncSession)
+    async_session_blocks_factory = sessionmaker(blocks_engine, expire_on_commit=False, class_=AsyncSession)
+
+    def async_session_blocks():
+        return async_session_blocks_factory()
 else:
     async_session_blocks = async_session
