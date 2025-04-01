@@ -117,6 +117,7 @@ async def get_transaction(
     res_outpoints = resolve_previous_outpoints
     async with async_session_blocks() as session_blocks:
         async with async_session() as session:
+            transaction = None
             if blockHash:
                 block_hashes = [blockHash]
             else:
