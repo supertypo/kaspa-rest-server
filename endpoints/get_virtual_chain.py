@@ -6,7 +6,7 @@ from typing import List
 from fastapi import Query, HTTPException
 from kaspa_script_address import to_address
 from pydantic import BaseModel
-from sqlalchemy import between
+from sqlalchemy import between, bindparam
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -114,8 +114,9 @@ async def get_virtual_chain_transactions(
                 TransactionInput.previous_outpoint_script,
                 TransactionInput.previous_outpoint_amount,
             )
-            .where(TransactionInput.transaction_id.in_(transaction_ids))
-            .order_by(TransactionInput.transaction_id, TransactionInput.index)
+            .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
+            .order_by(TransactionInput.transaction_id, TransactionInput.index),
+            {"transaction_ids": transaction_ids},
         )
         tx_inputs = tx_inputs.mappings().all()
 
@@ -139,8 +140,9 @@ async def get_virtual_chain_transactions(
                 TransactionOutput.amount,
                 TransactionOutput.script_public_key,
             )
-            .where(TransactionOutput.transaction_id.in_(transaction_ids))
-            .order_by(TransactionOutput.transaction_id, TransactionOutput.index)
+            .where(TransactionOutput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
+            .order_by(TransactionOutput.transaction_id, TransactionOutput.index),
+            {"transaction_ids": transaction_ids},
         )
         tx_outputs = tx_outputs.mappings().all()
 
