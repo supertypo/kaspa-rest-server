@@ -78,9 +78,8 @@ async def get_virtual_chain_transactions(
         return []
 
     async with async_session_blocks() as session_blocks:
-        accepted_txs = await session_blocks.execute(
+        chain_blocks = await session_blocks.execute(
             select(
-                TransactionAcceptance.transaction_id,
                 Block.hash,
                 Block.blue_score,
                 Block.daa_score,
@@ -91,17 +90,28 @@ async def get_virtual_chain_transactions(
             .where(between(Block.blue_score, blue_score_gte, blue_score_lt - 1))
             .order_by(Block.blue_score)
         )
+        chain_blocks = chain_blocks.mappings().all()
+
+    if not chain_blocks:
+        return []
+
+    async with async_session() as session:
+        accepted_txs = await session.execute(
+            select(TransactionAcceptance.block_hash, TransactionAcceptance.transaction_id).where(
+                TransactionAcceptance.block_hash.in_(bindparam("block_hashes", expanding=True))
+            ),
+            {"block_hashes": [x["hash"] for x in chain_blocks]},
+        )
         accepted_txs = accepted_txs.mappings().all()
 
     if not accepted_txs:
         return []
 
     transaction_ids = []
-    chain_blocks_dict = defaultdict(list)
+    accepted_txs_dict = defaultdict(list)
     for accepted_tx in accepted_txs:
         transaction_ids.append(accepted_tx["transaction_id"])
-        key = (accepted_tx["hash"], accepted_tx["blue_score"], accepted_tx["daa_score"], accepted_tx["timestamp"])
-        chain_blocks_dict[key].append(accepted_tx["transaction_id"])
+        accepted_txs_dict[accepted_tx["block_hash"]].append(accepted_tx["transaction_id"])
     del accepted_txs
 
     async with async_session() as session:
@@ -155,9 +165,9 @@ async def get_virtual_chain_transactions(
     del tx_outputs
 
     results = []
-    for (block_hash, blue_score, daa_score, timestamp), tx_ids in chain_blocks_dict.items():
+    for chain_block in chain_blocks:
         transactions = []
-        for tx_id in tx_ids:
+        for tx_id in accepted_txs_dict[chain_block["hash"]]:
             inputs = [VcTxInput(**inp) for inp in tx_inputs_dict[tx_id]] or None
             outputs = [VcTxOutput(**out) for out in tx_outputs_dict[tx_id]] or None
             if include_coinbase or inputs:
@@ -166,10 +176,10 @@ async def get_virtual_chain_transactions(
         if transactions:
             results.append(
                 VcBlockModel(
-                    hash=block_hash,
-                    blue_score=blue_score,
-                    daa_score=daa_score,
-                    timestamp=timestamp,
+                    hash=chain_block["hash"],
+                    blue_score=chain_block["blue_score"],
+                    daa_score=chain_block["daa_score"],
+                    timestamp=chain_block["timestamp"],
                     transactions=transactions,
                 )
             )
