@@ -33,10 +33,9 @@ class VcTxInput(BaseModel):
 
 
 class VcTxOutput(BaseModel):
-    amount: int
     script_public_key: str
     script_public_key_address: str
-    script_public_key_type: str
+    amount: int
 
 
 class VcTxModel(BaseModel):
@@ -183,7 +182,6 @@ async def get_virtual_chain_transactions(
     for tx_output in tx_outputs:
         tx_output = dict(tx_output)
         tx_output["script_public_key_address"] = to_address(ADDRESS_PREFIX, tx_output["script_public_key"])
-        tx_output["script_public_key_type"] = get_public_key_type(tx_output["script_public_key"])
         tx_outputs_dict[tx_output["transaction_id"]].append(tx_output)
     del tx_outputs
 
