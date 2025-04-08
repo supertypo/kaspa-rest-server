@@ -27,18 +27,21 @@ _logger = logging.getLogger(__name__)
 class VcTxInput(BaseModel):
     previous_outpoint_hash: str
     previous_outpoint_index: int
+    previous_outpoint_script: str | None
     previous_outpoint_address: str | None
     previous_outpoint_amount: int | None
 
 
 class VcTxOutput(BaseModel):
     amount: int
+    script_public_key: str
     script_public_key_address: str
     script_public_key_type: str
 
 
 class VcTxModel(BaseModel):
     transaction_id: str
+    is_accepted: bool = True
     inputs: List[VcTxInput] | None
     outputs: List[VcTxOutput] | None
 
@@ -191,7 +194,7 @@ async def get_virtual_chain_transactions(
             inputs = [VcTxInput(**inp) for inp in tx_inputs_dict[tx_id]] or None
             outputs = [VcTxOutput(**out) for out in tx_outputs_dict[tx_id]] or None
             if include_coinbase or inputs:
-                transactions.append(VcTxModel(transaction_id=tx_id, inputs=inputs, outputs=outputs))
+                transactions.append(VcTxModel(transaction_id=tx_id, is_accepted=True, inputs=inputs, outputs=outputs))
 
         if transactions:
             results.append(
