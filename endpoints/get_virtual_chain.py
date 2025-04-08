@@ -60,7 +60,7 @@ class VcBlockModel(BaseModel):
 @sql_db_only
 async def get_virtual_chain_transactions(
     response: Response,
-    blue_score_gte: int = Query(..., ge=0, alias="blueScoreGte"),
+    blue_score_gte: int = Query(..., ge=0, alias="blueScoreGte", description="Must be divisible by 10"),
     limit: int = Query(default=10, enum=[10, 100]),
     include_coinbase: bool = Query(default=True, alias="includeCoinbase"),
 ):
