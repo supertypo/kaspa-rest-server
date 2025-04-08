@@ -10,7 +10,7 @@ from sqlalchemy import between, bindparam
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import ADDRESS_PREFIX
+from constants import ADDRESS_PREFIX, PREV_OUT_RESOLVED
 from dbsession import async_session, async_session_blocks
 from endpoints import sql_db_only
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
@@ -115,19 +115,39 @@ async def get_virtual_chain_transactions(
     del accepted_txs
 
     async with async_session() as session:
-        tx_inputs = await session.execute(
-            select(
-                TransactionInput.transaction_id,
-                TransactionInput.index,
-                TransactionInput.previous_outpoint_hash,
-                TransactionInput.previous_outpoint_index,
-                TransactionInput.previous_outpoint_script,
-                TransactionInput.previous_outpoint_amount,
+        if PREV_OUT_RESOLVED:
+            tx_inputs = await session.execute(
+                select(
+                    TransactionInput.transaction_id,
+                    TransactionInput.index,
+                    TransactionInput.previous_outpoint_hash,
+                    TransactionInput.previous_outpoint_index,
+                    TransactionInput.previous_outpoint_script,
+                    TransactionInput.previous_outpoint_amount,
+                )
+                .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
+                .order_by(TransactionInput.transaction_id, TransactionInput.index),
+                {"transaction_ids": transaction_ids},
             )
-            .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
-            .order_by(TransactionInput.transaction_id, TransactionInput.index),
-            {"transaction_ids": transaction_ids},
-        )
+        else:
+            tx_inputs = await session.execute(
+                select(
+                    TransactionInput.transaction_id,
+                    TransactionInput.index,
+                    TransactionInput.previous_outpoint_hash,
+                    TransactionInput.previous_outpoint_index,
+                    TransactionOutput.script_public_key.label("previous_outpoint_script"),
+                    TransactionOutput.amount.label("previous_outpoint_amount"),
+                )
+                .outerjoin(
+                    TransactionOutput,
+                    (TransactionOutput.transaction_id == TransactionInput.previous_outpoint_hash)
+                    & (TransactionOutput.index == TransactionInput.previous_outpoint_index),
+                )
+                .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
+                .order_by(TransactionInput.transaction_id, TransactionInput.index),
+                {"transaction_ids": transaction_ids},
+            )
         tx_inputs = tx_inputs.mappings().all()
 
     tx_inputs_dict = defaultdict(list)
