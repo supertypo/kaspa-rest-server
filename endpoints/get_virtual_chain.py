@@ -60,7 +60,7 @@ class VcBlockModel(BaseModel):
 @sql_db_only
 async def get_virtual_chain_transactions(
     response: Response,
-    blue_score_gte: int = Query(..., ge=0, alias="blueScoreGte", description="Must be divisible by 10"),
+    blue_score_gte: int = Query(..., ge=0, alias="blueScoreGte", description="Must be divisible by limit"),
     limit: int = Query(default=10, enum=[10, 100]),
     include_coinbase: bool = Query(default=True, alias="includeCoinbase"),
 ):
@@ -69,8 +69,8 @@ async def get_virtual_chain_transactions(
     """
     if limit not in [10, 100]:
         raise HTTPException(400, "'limit' must be in [10, 100]")
-    if blue_score_gte % 10 != 0:
-        raise HTTPException(400, "'blueScoreGte' must be divisible by 10")
+    if blue_score_gte % limit != 0:
+        raise HTTPException(400, f"'blueScoreGte' must be divisible by limit ({limit})")
     blue_score_lt = blue_score_gte + limit
 
     add_cache_control(blue_score_lt, None, response)
