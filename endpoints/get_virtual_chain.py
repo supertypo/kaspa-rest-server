@@ -14,7 +14,6 @@ from constants import ADDRESS_PREFIX, PREV_OUT_RESOLVED
 from dbsession import async_session, async_session_blocks
 from endpoints import sql_db_only
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
-from helper.PublicKeyType import get_public_key_type
 from helper.utils import add_cache_control
 from models.Block import Block
 from models.Transaction import TransactionInput, TransactionOutput
