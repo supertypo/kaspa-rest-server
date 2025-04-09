@@ -56,13 +56,14 @@ class VcBlockModel(BaseModel):
     "/v2/virtual-chain/transactions",
     response_model=List[VcBlockModel],
     tags=["Kaspa virtual chain"],
-    response_model_exclude_unset=True,
+    response_model_exclude_none=True,
 )
 @sql_db_only
 async def get_virtual_chain_transactions(
     response: Response,
-    blue_score_gte: int = Query(..., ge=0, alias="blueScoreGte", description="Must be divisible by limit"),
+    blue_score_gte: int = Query(..., ge=0, alias="blueScoreGte", description="Divisible by limit", example=106329050),
     limit: int = Query(default=10, enum=[10, 100]),
+    resolve_inputs: bool = Query(default=False, alias="resolveInputs"),
     include_coinbase: bool = Query(default=True, alias="includeCoinbase"),
 ):
     """
@@ -116,16 +117,17 @@ async def get_virtual_chain_transactions(
     del accepted_txs
 
     async with async_session() as session:
-        if PREV_OUT_RESOLVED:
+        if PREV_OUT_RESOLVED or not resolve_inputs:
+            fields = [
+                TransactionInput.transaction_id,
+                TransactionInput.index,
+                TransactionInput.previous_outpoint_hash,
+                TransactionInput.previous_outpoint_index,
+            ]
+            if resolve_inputs:
+                fields.extend([TransactionInput.previous_outpoint_script, TransactionInput.previous_outpoint_amount])
             tx_inputs = await session.execute(
-                select(
-                    TransactionInput.transaction_id,
-                    TransactionInput.index,
-                    TransactionInput.previous_outpoint_hash,
-                    TransactionInput.previous_outpoint_index,
-                    TransactionInput.previous_outpoint_script,
-                    TransactionInput.previous_outpoint_amount,
-                )
+                select(*fields)
                 .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
                 .order_by(TransactionInput.transaction_id, TransactionInput.index),
                 {"transaction_ids": transaction_ids},
@@ -153,8 +155,9 @@ async def get_virtual_chain_transactions(
 
     tx_inputs_dict = defaultdict(list)
     for tx_input in tx_inputs:
-        tx_input = dict(tx_input)
-        tx_input["previous_outpoint_address"] = to_address(ADDRESS_PREFIX, tx_input["previous_outpoint_script"])
+        if resolve_inputs:
+            tx_input = dict(tx_input)
+            tx_input["previous_outpoint_address"] = to_address(ADDRESS_PREFIX, tx_input["previous_outpoint_script"])
         tx_inputs_dict[tx_input["transaction_id"]].append(tx_input)
     del tx_inputs
 
@@ -191,7 +194,7 @@ async def get_virtual_chain_transactions(
             inputs = [VcTxInput(**inp) for inp in tx_inputs_dict[tx_id]] or None
             outputs = [VcTxOutput(**out) for out in tx_outputs_dict[tx_id]] or None
             if include_coinbase or inputs:
-                transactions.append(VcTxModel(transaction_id=tx_id, is_accepted=True, inputs=inputs, outputs=outputs))
+                transactions.append(VcTxModel(transaction_id=tx_id, inputs=inputs, outputs=outputs))
 
         if transactions:
             results.append(
