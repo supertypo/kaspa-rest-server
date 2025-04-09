@@ -157,7 +157,8 @@ async def get_virtual_chain_transactions(
     for tx_input in tx_inputs:
         if resolve_inputs:
             tx_input = dict(tx_input)
-            tx_input["previous_outpoint_address"] = to_address(ADDRESS_PREFIX, tx_input["previous_outpoint_script"])
+            if resolve_inputs and tx_input["previous_outpoint_script"]:
+                tx_input["previous_outpoint_address"] = to_address(ADDRESS_PREFIX, tx_input["previous_outpoint_script"])
         tx_inputs_dict[tx_input["transaction_id"]].append(tx_input)
     del tx_inputs
 
