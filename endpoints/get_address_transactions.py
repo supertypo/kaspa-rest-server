@@ -18,6 +18,7 @@ from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS
 from dbsession import async_session
 from endpoints import sql_db_only
 from endpoints.get_transactions import search_for_transactions, TxSearch, TxModel
+from helper.utils import add_cache_control
 from models.AddressKnown import AddressKnown
 from models.TxAddrMapping import TxAddrMapping, TxScriptMapping
 from server import app
@@ -73,6 +74,7 @@ class PreviousOutpointLookupMode(str, Enum):
 )
 @sql_db_only
 async def get_full_transactions_for_address(
+    response: Response,
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
     limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
     offset: int = Query(description="The offset from which to get records", ge=0, default=0),
@@ -91,7 +93,7 @@ async def get_full_transactions_for_address(
     async with async_session() as s:
         if USE_SCRIPT_FOR_ADDRESS:
             tx_within_limit_offset = await s.execute(
-                select(TxScriptMapping.transaction_id)
+                select(TxScriptMapping.transaction_id, TxScriptMapping.block_time)
                 .filter(TxScriptMapping.script_public_key == script)
                 .limit(limit)
                 .offset(offset)
@@ -99,14 +101,31 @@ async def get_full_transactions_for_address(
             )
         else:
             tx_within_limit_offset = await s.execute(
-                select(TxAddrMapping.transaction_id)
+                select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
                 .filter(TxAddrMapping.address == kaspaAddress)
                 .limit(limit)
                 .offset(offset)
                 .order_by(TxAddrMapping.block_time.desc())
             )
 
-    tx_ids_in_page = [x[0] for x in tx_within_limit_offset.all()]
+    tx_ids_in_page = []
+    max_block_time = 0
+    for tx_id, block_time in tx_within_limit_offset.all():
+        tx_ids_in_page.append(tx_id)
+        if block_time is not None and block_time > max_block_time:
+            max_block_time = block_time
+
+    if offset and max_block_time:
+        delta_seconds = time.time() - int(max_block_time) / 1000
+        if delta_seconds < 600:
+            ttl = 8
+        elif delta_seconds < 86400:  # 1 day
+            ttl = 60
+        else:
+            ttl = 600
+    else:
+        ttl = 8
+    response.headers["Cache-Control"] = f"public, max-age={ttl}"
 
     return await search_for_transactions(TxSearch(transactionIds=tx_ids_in_page), fields, resolve_previous_outpoints)
 
@@ -271,7 +290,13 @@ async def get_full_transactions_for_address_page(
     response.headers["X-Current-Page"] = str(len(tx_ids))
     response.headers["X-Oldest-Epoch-Millis"] = str(oldest_block_time)
 
-    return await search_for_transactions(TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints)
+    res = await search_for_transactions(TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints)
+    if before:
+        add_cache_control(None, before, response)
+    elif len(tx_ids) >= limit:
+        max_block_time = max((r.get("block_time") for r in res))
+        add_cache_control(None, max_block_time, response)
+    return res
 
 
 @app.get(
