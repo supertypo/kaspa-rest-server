@@ -34,5 +34,6 @@ if os.getenv("SQL_URI_BLOCKS"):
     def async_session_blocks():
         return async_session_blocks_factory()
 else:
+
     def async_session_blocks():
         return async_session_factory()
