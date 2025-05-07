@@ -328,6 +328,23 @@ async def get_transaction_count_for_address(
 
 
 @app.get(
+    "/addresses/names",
+    response_model=List[AddressName],
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
+@sql_db_only
+async def get_addresses_names(response: Response):
+    """
+    Get the name for an address
+    """
+    response.headers["Cache-Control"] = "public, max-age=60"
+    async with async_session() as s:
+        rows = (await s.execute(select(AddressKnown))).scalars().all()
+        return [{"name": r.name, "address": r.address} for r in rows]
+
+
+@app.get(
     "/addresses/{kaspaAddress}/name",
     response_model=AddressName | None,
     tags=["Kaspa addresses"],
