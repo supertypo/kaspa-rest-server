@@ -8,6 +8,7 @@ from fastapi import Response
 from pydantic import BaseModel
 from sqlalchemy import select, exists, func
 
+from constants import BPS
 from dbsession import async_session, async_session_blocks
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.difficulty_calculation import bits_to_difficulty
@@ -205,27 +206,28 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
     """
     response.headers["X-Data-Source"] = "Database"
 
-    if blueScore < 0 or current_blue_score_data["blue_score"] - blueScore < 0:
+    if blueScore < 0 or current_blue_score_data["blue_score"] and current_blue_score_data["blue_score"] - blueScore < 0:
         return []
 
     add_cache_control(blueScore, None, response)
 
-    # Try looking up hashes and finding the blocks in kaspad first
-    async with async_session_blocks() as s:
-        block_hashes = (await s.execute(select(Block.hash).where(Block.blue_score == blueScore))).scalars().all()
+    # If the blue score is not older than 1 day, try looking up hashes and finding the blocks in kaspad first
+    if (current_blue_score_data["blue_score"] and current_blue_score_data["blue_score"] - blueScore) / BPS < 86400:
+        async with async_session_blocks() as s:
+            block_hashes = (await s.execute(select(Block.hash).where(Block.blue_score == blueScore))).scalars().all()
 
-    if not block_hashes:
-        return []
+        if not block_hashes:
+            return []
 
-    result = []
-    for block_hash in block_hashes:
-        resp = await kaspad_client.request(
-            "getBlockRequest", params={"hash": block_hash, "includeTransactions": includeTransactions}
-        )
-        if not resp.get("getBlockResponse", {}).get("block", {}).get("verboseData", {}).get("isHeaderOnly", True):
-            result.append(resp["getBlockResponse"]["block"])  # Block found in kaspad and is not headerOnly
-    if result:
-        return result
+        result = []
+        for block_hash in block_hashes:
+            resp = await kaspad_client.request(
+                "getBlockRequest", params={"hash": block_hash, "includeTransactions": includeTransactions}
+            )
+            if not resp.get("getBlockResponse", {}).get("block", {}).get("verboseData", {}).get("isHeaderOnly", True):
+                result.append(resp["getBlockResponse"]["block"])  # Block found in kaspad and is not headerOnly
+        if result:
+            return result
 
     # Block hashes not found in kaspad, look up blocks in the db instead
     async with async_session_blocks() as s:
