@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, exists, func
 
 from dbsession import async_session, async_session_blocks
+from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.difficulty_calculation import bits_to_difficulty
 from helper.mining_address import get_miner_payload_from_block, retrieve_miner_info_from_payload
 from helper.utils import add_cache_control
@@ -203,16 +204,38 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
     Lists blocks of a given blueScore
     """
     response.headers["X-Data-Source"] = "Database"
+
+    if blueScore < 0 or current_blue_score_data["blue_score"] - blueScore < 0:
+        return []
+
     add_cache_control(blueScore, None, response)
 
+    # Try looking up hashes and finding the blocks in kaspad first
+    async with async_session_blocks() as s:
+        block_hashes = (await s.execute(select(Block.hash).where(Block.blue_score == blueScore))).scalars().all()
+
+    if not block_hashes:
+        return []
+
+    result = []
+    for block_hash in block_hashes:
+        resp = await kaspad_client.request(
+            "getBlockRequest", params={"hash": block_hash, "includeTransactions": includeTransactions}
+        )
+        if not resp.get("getBlockResponse", {}).get("block", {}).get("verboseData", {}).get("isHeaderOnly", True):
+            result.append(resp["getBlockResponse"]["block"])  # Block found in kaspad and is not headerOnly
+    if result:
+        return result
+
+    # Block hashes not found in kaspad, look up blocks in the db instead
     async with async_session_blocks() as s:
         blocks = (await s.execute(block_join_query().where(Block.blue_score == blueScore))).all()
 
     result = []
     for block, is_chain_block, parents, children, transaction_ids in blocks:
-        transactions = (
-            await get_transactions(block.hash, transaction_ids) if includeTransactions and transaction_ids else None
-        )
+        transactions = None
+        if includeTransactions and transaction_ids:
+            transactions = await get_transactions(block.hash, transaction_ids)
         result.append(map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions))
 
     return result
