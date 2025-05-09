@@ -219,9 +219,11 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
 
     result = []
     for block_hash in block_hashes:
-        resp = await kaspad_client.request("getBlockRequest", params={"hash": block_hash, "includeTransactions": includeTransactions})
+        resp = await kaspad_client.request(
+            "getBlockRequest", params={"hash": block_hash, "includeTransactions": includeTransactions}
+        )
         if not resp.get("getBlockResponse", {}).get("block", {}).get("verboseData", {}).get("isHeaderOnly", True):
-            result.append(resp["getBlockResponse"]["block"]) # Block found in kaspad and is not headerOnly
+            result.append(resp["getBlockResponse"]["block"])  # Block found in kaspad and is not headerOnly
     if result:
         return result
 
