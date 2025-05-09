@@ -203,14 +203,13 @@ async def get_blocks_from_bluescore(response: Response, blueScore: int = 4367917
     Lists blocks of a given blueScore
     """
     response.headers["X-Data-Source"] = "Database"
+    add_cache_control(blueScore, None, response)
 
     async with async_session_blocks() as s:
         blocks = (await s.execute(block_join_query().where(Block.blue_score == blueScore))).all()
 
     result = []
     for block, is_chain_block, parents, children, transaction_ids in blocks:
-        if block:
-            add_cache_control(block.blue_score, block.timestamp, response)
         transactions = (
             await get_transactions(block.hash, transaction_ids) if includeTransactions and transaction_ids else None
         )
