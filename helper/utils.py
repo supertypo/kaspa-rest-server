@@ -11,16 +11,22 @@ def add_cache_control(blue_score, timestamp, response):
         delta_seconds = abs(time.time() - int(timestamp) / 1000)
     else:
         return
-    if delta_seconds < 20:
-        ttl = 4
-    elif delta_seconds < 60:
-        ttl = 20
-    elif delta_seconds < 600:
-        ttl = 60
-    elif delta_seconds < 3600:
-        ttl = 600
-    elif delta_seconds < 86400:
-        ttl = 1200
-    else:
-        ttl = 3600
+    if delta_seconds < 20: # <20 seconds
+        ttl = 4 # 4 seconds
+    elif delta_seconds < 60: # 20s - 1m
+        ttl = 20 # 20 seconds
+    elif delta_seconds < 600: # 1m - 10m
+        ttl = 60 # 1 minute
+    elif delta_seconds < 3600: # 10m - 1h
+        ttl = 600 # 10 minutes
+    elif delta_seconds < 10800: # 1h - 3h
+        ttl = 1200 # 20 minutes
+    elif delta_seconds < 36000: # 3h - 10h
+        ttl = 3600 # 1 hour
+    elif delta_seconds < 86400: # 10h - 1d
+        ttl = 10800 # 3 hours
+    elif delta_seconds < 172800: # 1d - 2d
+        ttl = 36000 # 10 hours
+    else: # > 2d
+        ttl = 86400 # 1 day
     response.headers["Cache-Control"] = f"public, max-age={ttl}"
