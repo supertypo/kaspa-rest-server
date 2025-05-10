@@ -286,10 +286,6 @@ async def get_full_transactions_for_address_page(
         response.headers["X-Next-Page-After"] = str(newest_block_time)
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
 
-    # Legacy:
-    response.headers["X-Current-Page"] = str(len(tx_ids))
-    response.headers["X-Oldest-Epoch-Millis"] = str(oldest_block_time)
-
     res = await search_for_transactions(TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints)
     if before:
         add_cache_control(None, before, response)

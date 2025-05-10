@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -30,18 +31,28 @@ app = FastAPI(
 )
 app.router.route_class = StrictRoute
 
+
+class CacheControlMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.method in ("GET", "HEAD") and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "public, max-age=8"
+        return response
+
+
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(LimitUploadSize, max_upload_size=200_000)  # ~1MB
 
-origins = ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Data-Source", "X-Page-Count", "X-Next-Page-After", "X-Next-Page-Before"]
 )
+
+app.add_middleware(CacheControlMiddleware)
 
 
 class KaspadStatus(BaseModel):
