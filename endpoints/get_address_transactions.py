@@ -6,7 +6,7 @@ from typing import List
 
 from kaspa_script_address import to_script
 
-from constants import DISABLE_LIMITS, USE_SCRIPT_FOR_ADDRESS
+from constants import USE_SCRIPT_FOR_ADDRESS, TX_COUNT_LIMIT
 
 from fastapi import Path, Query, HTTPException
 from pydantic import BaseModel
@@ -315,7 +315,7 @@ async def get_transaction_count_for_address(
         raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
 
     async with async_session() as s:
-        if DISABLE_LIMITS:
+        if not TX_COUNT_LIMIT:
             if USE_SCRIPT_FOR_ADDRESS:
                 result = await s.execute(select(func.count()).filter(TxScriptMapping.script_public_key == script))
             else:
@@ -324,25 +324,33 @@ async def get_transaction_count_for_address(
             if USE_SCRIPT_FOR_ADDRESS:
                 result = await s.execute(
                     select(func.count()).select_from(
-                        select(1).filter(TxScriptMapping.script_public_key == script).limit(100001).subquery()
+                        select(1)
+                        .filter(TxScriptMapping.script_public_key == script)
+                        .limit(TX_COUNT_LIMIT + 1)
+                        .subquery()
                     )
                 )
             else:
                 result = await s.execute(
                     select(func.count()).select_from(
-                        select(1).filter(TxAddrMapping.address == kaspaAddress).limit(100001).subquery()
+                        select(1).filter(TxAddrMapping.address == kaspaAddress).limit(TX_COUNT_LIMIT + 1).subquery()
                     )
                 )
         tx_count = result.scalar()
+
         limit_exceeded = False
-        ttl = 8
-        if not DISABLE_LIMITS:
-            if tx_count > 10000:
-                tx_count = 10000
-                limit_exceeded = True
-                ttl = 86400
-            elif tx_count > 1000:
-                ttl = 30
+        if TX_COUNT_LIMIT and tx_count > TX_COUNT_LIMIT:
+            tx_count = TX_COUNT_LIMIT
+            limit_exceeded = True
+
+        if tx_count >= 1_000_000:
+            ttl = 600
+        elif tx_count >= 100_000:
+            ttl = 60
+        elif tx_count >= 10_000:
+            ttl = 20
+        else:
+            ttl = 8
 
     response.headers["Cache-Control"] = f"public, max-age={ttl}"
     return TransactionCount(total=tx_count, limit_exceeded=limit_exceeded)
