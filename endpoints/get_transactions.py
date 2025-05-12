@@ -88,6 +88,19 @@ class TxSearch(BaseModel):
     acceptingBlueScores: TxSearchAcceptingBlueScores | None
 
 
+class TxAcceptanceRequest(BaseModel):
+    transactionIds: list[str] = [
+        "b9382bdee4aa364acf73eda93914eaae61d0e78334d1b8a637ab89ef5e224e41",
+        "1e098b3830c994beb28768f7924a38286cec16e85e9757e0dc3574b85f624c34",
+        "6dd5ee1add449c60d2c2b9545a8dfca7cfbc9a29ce2d3f3ec8bbde14dd97610d",
+    ]
+
+
+class TxAcceptanceResponse(BaseModel):
+    transactionId: str = "b9382bdee4aa364acf73eda93914eaae61d0e78334d1b8a637ab89ef5e224e41"
+    accepted: bool
+
+
 class PreviousOutpointLookupMode(str, Enum):
     no = "no"
     light = "light"
@@ -329,6 +342,36 @@ async def search_for_transactions(
         )
         results.append(result)
     return results
+
+
+@app.post(
+    "/transactions/acceptance",
+    response_model=List[TxAcceptanceResponse],
+    response_model_exclude_unset=True,
+    tags=["Kaspa transactions"],
+    openapi_extra={"strict_query_params": True},
+)
+@sql_db_only
+async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest):
+    """
+    Given a list of transaction_ids, return whether each one is accepted
+    """
+    transaction_ids = tx_acceptance_request.transactionIds
+    if len(transaction_ids) > TX_SEARCH_ID_LIMIT:
+        raise HTTPException(422, f"Too many transaction ids. Max {TX_SEARCH_ID_LIMIT}")
+
+    async with async_session() as s:
+        result = await s.execute(
+            select(TransactionAcceptance.transaction_id).where(
+                TransactionAcceptance.transaction_id.in_(set(transaction_ids))  # Dedup
+            )
+        )
+        transactions_ids_accepted = set(result.scalars().all())
+
+    return [
+        TxAcceptanceResponse(transactionId=transaction_id, accepted=(transaction_id in transactions_ids_accepted))
+        for transaction_id in transaction_ids
+    ]
 
 
 async def get_tx_blocks_from_db(fields, transaction_ids):
