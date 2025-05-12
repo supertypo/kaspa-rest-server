@@ -346,7 +346,9 @@ async def get_transaction_count_for_address(
             tx_count = TX_COUNT_LIMIT
             limit_exceeded = True
 
-        if tx_count >= 1_000_000:
+        if limit_exceeded:
+            ttl = 3600
+        elif tx_count >= 1_000_000:
             ttl = 600
         elif tx_count >= 100_000:
             ttl = 60
