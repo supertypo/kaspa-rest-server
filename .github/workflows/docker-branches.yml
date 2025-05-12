@@ -16,8 +16,12 @@ jobs:
     steps:
     - name: Add SHORT_SHA env property with commit short sha
       run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+
     - name: Checkout code
       uses: actions/checkout@v2
+
+    - name: Git describe version
+      run: echo "GIT_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
 
     - name: Login to Docker Hub
       uses: docker/login-action@v2
@@ -39,7 +43,8 @@ jobs:
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
           -t kaspanet/kaspa-rest-server:${SHORT_SHA} \
-        -t kaspanet/kaspa-rest-server:${GITHUB_REF_NAME} \
+          -t kaspanet/kaspa-rest-server:${GITHUB_REF_NAME} \
+          --build-arg version=${{ env.GIT_VERSION }} \
           --push .
-        
+
         docker buildx imagetools inspect kaspanet/kaspa-rest-server:${SHORT_SHA}
