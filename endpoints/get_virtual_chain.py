@@ -53,9 +53,9 @@ class VcBlockModel(BaseModel):
 
 
 @app.get(
-    "/v2/virtual-chain/transactions",
+    "/virtual-chain",
     response_model=List[VcBlockModel],
-    tags=["Kaspa virtual chain"],
+    tags=["EXPERIMENTAL: Kaspa virtual chain"],
     response_model_exclude_none=True,
 )
 @sql_db_only
