@@ -1,16 +1,15 @@
 # encoding: utf-8
-import re
 import time
 from enum import Enum
 from typing import List
 
-from kaspa_script_address import to_script
+from kaspa_script_address import to_script, to_address
 
-from constants import USE_SCRIPT_FOR_ADDRESS, TX_COUNT_LIMIT
+from constants import USE_SCRIPT_FOR_ADDRESS, TX_COUNT_LIMIT, ADDRESS_PREFIX
 
 from fastapi import Path, Query, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, values, column, exists
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -148,21 +147,25 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
         script_addresses = set()
         for address in addresses:
             try:
-                if not re.search(REGEX_KASPA_ADDRESS, address):
-                    raise ValueError
                 script_addresses.add(to_script(address))
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"Invalid address: {address}")
 
         if USE_SCRIPT_FOR_ADDRESS:
-            result = await s.execute(
-                select(TxScriptMapping).filter(TxScriptMapping.script_public_key.in_(script_addresses))
+            v = values(column("script_public_key", TxScriptMapping.__table__.c.script_public_key.type), name="v").data(
+                [(addr,) for addr in script_addresses]
             )
-            addresses_used = set(r.script_public_key_address for r in result.scalars().all())
+            result = await s.execute(
+                select(v.c.script_public_key).where(
+                    exists().where(TxScriptMapping.script_public_key == v.c.script_public_key)
+                )
+            )
+            addresses_used = set(to_address(ADDRESS_PREFIX, s) for s in result.scalars().all())
         else:
-            result = await s.execute(
-                select(TxAddrMapping.address).distinct().filter(TxScriptMapping.address.in_(addresses))
+            v = values(column("address", TxAddrMapping.__table__.c.address.type), name="v").data(
+                [(addr,) for addr in addresses]
             )
+            result = await s.execute(select(v.c.address).where(exists().where(TxAddrMapping.address == v.c.address)))
             addresses_used = set(result.scalars().all())
 
     return [
