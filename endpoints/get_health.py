@@ -3,7 +3,6 @@ import hashlib
 import time
 from typing import List
 
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from fastapi.responses import JSONResponse
