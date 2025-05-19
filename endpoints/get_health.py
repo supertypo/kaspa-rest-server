@@ -6,7 +6,7 @@ from typing import List
 from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
-
+from fastapi.responses import JSONResponse
 from constants import BPS, HEALTH_TOLERANCE_DOWN
 from dbsession import async_session_blocks, async_session
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
@@ -95,6 +95,6 @@ async def health_state():
     }
 
     if not db_check_status.isSynced or not any(kaspad["isSynced"] for kaspad in kaspads):
-        raise HTTPException(status_code=503, detail=result)
+        return JSONResponse(status_code=503, content=result)
 
     return result
