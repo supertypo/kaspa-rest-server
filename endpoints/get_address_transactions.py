@@ -1,7 +1,6 @@
 # encoding: utf-8
 import time
-from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from kaspa_script_address import to_script, to_address
 
@@ -16,7 +15,13 @@ from starlette.responses import Response
 from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS
 from dbsession import async_session
 from endpoints import sql_db_only
-from endpoints.get_transactions import search_for_transactions, TxSearch, TxModel
+from endpoints.get_transactions import (
+    search_for_transactions,
+    TxSearch,
+    TxModel,
+    PreviousOutpointLookupMode,
+    AcceptanceMode,
+)
 from helper.utils import add_cache_control
 from models.AddressKnown import AddressKnown
 from models.TxAddrMapping import TxAddrMapping, TxScriptMapping
@@ -56,12 +61,6 @@ class TransactionCount(BaseModel):
 class AddressName(BaseModel):
     address: str
     name: str
-
-
-class PreviousOutpointLookupMode(str, Enum):
-    no = "no"
-    light = "light"
-    full = "full"
 
 
 @app.get(
@@ -202,6 +201,7 @@ async def get_full_transactions_for_address_page(
     ),
     fields: str = "",
     resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
+    acceptance: Optional[AcceptanceMode] = Query(default=None),
 ):
     """
     Get all transactions for a given address from database.
@@ -289,7 +289,9 @@ async def get_full_transactions_for_address_page(
         response.headers["X-Next-Page-After"] = str(newest_block_time)
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
 
-    res = await search_for_transactions(TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints)
+    res = await search_for_transactions(
+        TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints, acceptance
+    )
     if before:
         add_cache_control(None, before, response)
     elif after and len(tx_ids) >= limit:
