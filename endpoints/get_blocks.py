@@ -141,19 +141,16 @@ async def get_block(
     Get block information for a given block id
     """
     block = await get_block_from_kaspad(blockId, includeTransactions, includeColor)
-    if block:
-        logging.debug(f"Found block {blockId} in kaspad")
-    else:
-        if IS_SQL_DB_CONFIGURED:
-            response.headers["X-Data-Source"] = "Database"
-            block = await get_block_from_db(blockId, includeTransactions)
-            if block:
-                logging.debug(f"Found block {blockId} in database")
-                if includeColor:
-                    if block["verboseData"]["isChainBlock"]:
-                        block["extra"] = {"color": "blue"}
-                    else:
-                        block["extra"] = {"color": await get_block_color_from_db(block)}
+    if not block and IS_SQL_DB_CONFIGURED:
+        response.headers["X-Data-Source"] = "Database"
+        block = await get_block_from_db(blockId, includeTransactions)
+        if block:
+            logging.debug(f"Found block {blockId} in database")
+            if includeColor:
+                if block["verboseData"]["isChainBlock"]:
+                    block["extra"] = {"color": "blue"}
+                else:
+                    block["extra"] = {"color": await get_block_color_from_db(block)}
     if block:
         miner_payload = get_miner_payload_from_block(block)
         if miner_payload:
@@ -245,11 +242,13 @@ async def get_block_from_kaspad(block_hash, include_transactions, include_color)
         try:
             resp = await rpc_client.get_block(request)
             block = convert_to_legacy_block(resp.get("block", {}))
+            logging.debug(f"Found block in kaspad (wrpc): {block_hash}")
         except Exception:
             block = {}
     else:
         resp = await kaspad_client.request("getBlockRequest", request)
         block = resp.get("getBlockResponse", {}).get("block", {})
+        logging.debug(f"Found block in kaspad (grpc): {block_hash}")
     if not block.get("verboseData", {}).get("isHeaderOnly", True):
         block["extra"] = {}
         if include_color:
@@ -457,12 +456,19 @@ async def get_transactions(blockId, transactionIds):
 
 
 def convert_to_legacy_block(block: dict) -> dict:
+    header = block.get("header", {})
+    header["blueWork"] = header["blueWork"].lstrip("0") if header.get("blueWork") else None
+
+    parents = []
+    for level in header.get("parentsByLevel", []):
+        parents.append({"parentHashes": level})
+    header["parents"] = parents
+
     for tx in block.get("transactions", []):
         for tx_output in tx.get("outputs", []):
-            value = tx_output.get("value")
-            if isinstance(value, int):
-                tx_output["amount"] = value
-            script_public_key = tx_output.get("scriptPublicKey")
-            if isinstance(script_public_key, str):
-                tx_output["scriptPublicKey"] = {"scriptPublicKey": script_public_key, "version": 0}
+            tx_output["amount"] = tx_output.get("value")
+            script_public_key = (
+                tx_output.get("scriptPublicKey").lstrip("0") if tx_output.get("scriptPublicKey") else None
+            )
+            tx_output["scriptPublicKey"] = {"scriptPublicKey": script_public_key, "version": 0}
     return block
