@@ -1,4 +1,6 @@
 # encoding: utf-8
+from asyncio import wait_for
+
 from kaspa import RpcClient, Resolver
 
 from constants import KASPAD_WRPC_URL
@@ -12,5 +14,7 @@ async def kaspad_rpc_client() -> RpcClient:
             else:
                 kaspad_rpc_client.client = RpcClient(url=KASPAD_WRPC_URL)
         if not kaspad_rpc_client.client.is_connected:
-            await kaspad_rpc_client.client.connect()
+            await wait_for(kaspad_rpc_client.client.connect(), timeout=10.0)
+        else:
+            await wait_for(kaspad_rpc_client.client.ping(), timeout=10.0)
         return kaspad_rpc_client.client
