@@ -6,6 +6,8 @@ from typing import List
 from pydantic import BaseModel
 from sqlalchemy import select
 from fastapi.responses import JSONResponse
+from kaspad.KaspadRpcClient import kaspad_rpc_client
+
 from constants import BPS, HEALTH_TOLERANCE_DOWN
 from dbsession import async_session_blocks, async_session
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
@@ -33,6 +35,7 @@ class DBCheckStatus(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    kaspadServerRpc: KaspadResponse | None
     kaspadServers: List[KaspadResponse]
     database: DBCheckStatus
 
@@ -75,25 +78,28 @@ async def health_state():
     except Exception:
         db_check_status = DBCheckStatus(isSynced=False)
 
-    await kaspad_client.initialize_all()
+    rpc_client = await kaspad_rpc_client()
+    rpc_client_info = (await rpc_client.get_info()) if rpc_client else None
 
-    kaspads = [
-        {
+    await kaspad_client.initialize_all()
+    kaspads = []
+    for i, kaspad in enumerate(kaspad_client.kaspads):
+        kaspads.append({
             "kaspadHost": f"KASPAD_HOST_{i + 1}",
             "serverVersion": kaspad.server_version,
             "isUtxoIndexed": kaspad.is_utxo_indexed,
             "isSynced": kaspad.is_synced,
             "p2pId": hashlib.sha256(kaspad.p2p_id.encode()).hexdigest(),
             "blueScore": current_blue_score_node,
-        }
-        for i, kaspad in enumerate(kaspad_client.kaspads)
-    ]
+        })
+
     result = {
+        "kaspadServerRpc": rpc_client_info,
         "kaspadServers": kaspads,
         "database": db_check_status.dict(),
     }
 
-    if not db_check_status.isSynced or not any(kaspad["isSynced"] for kaspad in kaspads):
+    if not db_check_status.isSynced or not any(kaspad["isSynced"] for kaspad in kaspads or not (rpc_client_info or {}).get("isSynced", True)):
         return JSONResponse(status_code=503, content=result)
 
     return result
