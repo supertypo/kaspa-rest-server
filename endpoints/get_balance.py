@@ -34,6 +34,6 @@ async def get_balance_from_kaspa_address(
         resp = await kaspad_client.request("getBalanceByAddressRequest", request)
         if resp.get("error"):
             raise HTTPException(500, resp["error"])
-        balance = resp.get("getBalanceByAddressResponse")
+        balance = resp["getBalanceByAddressResponse"]
 
-    return {"address": kaspaAddress, "balance": balance.get("balance")}
+    return {"address": kaspaAddress, "balance": balance["balance"]}
