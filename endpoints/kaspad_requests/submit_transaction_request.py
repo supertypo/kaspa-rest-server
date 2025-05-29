@@ -1,5 +1,5 @@
 # encoding: utf-8
-
+from asyncio import wait_for
 from typing import List
 
 from fastapi import Query, HTTPException
@@ -70,7 +70,7 @@ async def submit_a_new_transaction(
         # Replace by fee doesn't have the allowOrphan attribute
         body = SubmitTransactionReplacementRequest(transaction=body.transaction)
         if rpc_client:
-            tx_resp = await rpc_client.submit_transaction_replacement(body.dict())
+            tx_resp = await wait_for(rpc_client.submit_transaction_replacement(body.dict()), 10)
         else:
             resp = await kaspad_client.request("submitTransactionReplacementRequest", body.dict())
             if resp.get("error"):
@@ -78,7 +78,7 @@ async def submit_a_new_transaction(
             tx_resp = resp["submitTransactionReplacementResponse"]
     else:
         if rpc_client:
-            tx_resp = await rpc_client.submit_transaction(body.dict())
+            tx_resp = await wait_for(rpc_client.submit_transaction(body.dict()), 10)
         else:
             resp = await kaspad_client.request("submitTransactionRequest", body.dict())
             if resp.get("error"):

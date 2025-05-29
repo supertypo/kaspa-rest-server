@@ -1,4 +1,6 @@
 # encoding: utf-8
+from asyncio import wait_for
+
 from fastapi import HTTPException
 from pydantic import BaseModel
 
@@ -19,7 +21,7 @@ async def get_coinsupply():
     """
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
-        coin_supply = await rpc_client.get_coin_supply()
+        coin_supply = await wait_for(rpc_client.get_coin_supply(), 10)
     else:
         resp = await kaspad_client.request("getCoinSupplyRequest")
         if resp.get("error"):

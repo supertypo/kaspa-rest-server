@@ -1,6 +1,7 @@
 # encoding: utf-8
 import logging
 import os
+from asyncio import wait_for
 from typing import List
 
 from fastapi import Query, Path, HTTPException
@@ -182,7 +183,7 @@ async def get_blocks(
     request = {"lowHash": lowHash, "includeBlocks": includeBlocks, "includeTransactions": includeTransactions}
     if rpc_client:
         try:
-            resp = await rpc_client.get_blocks(request)
+            resp = await wait_for(rpc_client.get_blocks(request), 60)
             for block in resp.get("blocks", []):
                 convert_to_legacy_block(block)
             return resp
@@ -240,7 +241,7 @@ async def get_block_from_kaspad(block_hash, include_transactions, include_color)
     request = {"hash": block_hash, "includeTransactions": include_transactions}
     if rpc_client:
         try:
-            resp = await rpc_client.get_block(request)
+            resp = await wait_for(rpc_client.get_block(request), 10)
             block = convert_to_legacy_block(resp.get("block", {}))
             logging.debug(f"Found block in kaspad (wrpc): {block_hash}")
         except Exception:
@@ -296,7 +297,7 @@ async def get_block_color_from_kaspad(block_hash):
     request = {"hash": block_hash}
     if rpc_client:
         try:
-            resp = await rpc_client.get_current_block_color(request)
+            resp = await wait_for(rpc_client.get_current_block_color(request), 10)
         except Exception:
             resp = {}
     else:

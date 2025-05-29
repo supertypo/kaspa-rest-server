@@ -1,4 +1,5 @@
 # encoding: utf-8
+from asyncio import wait_for
 
 from fastapi import HTTPException
 from typing import List
@@ -30,7 +31,7 @@ async def get_fee_estimate():
     """
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
-        fee_estimate = await rpc_client.get_fee_estimate()
+        fee_estimate = await wait_for(rpc_client.get_fee_estimate(), 10)
     else:
         resp = await kaspad_client.request("getFeeEstimateRequest")
         if resp.get("error"):

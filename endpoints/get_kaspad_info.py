@@ -1,5 +1,6 @@
 # encoding: utf-8
 import hashlib
+from asyncio import wait_for
 
 from fastapi import HTTPException
 from pydantic import BaseModel
@@ -23,7 +24,7 @@ async def get_kaspad_info():
     """
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
-        info = await rpc_client.get_info()
+        info = await wait_for(rpc_client.get_info(), 10)
     else:
         resp = await kaspad_client.request("getInfoRequest")
         if resp.get("error"):

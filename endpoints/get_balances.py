@@ -1,4 +1,5 @@
 # encoding: utf-8
+from asyncio import wait_for
 from typing import List
 
 from fastapi import HTTPException
@@ -36,7 +37,7 @@ async def get_balances_from_kaspa_addresses(body: BalanceRequest):
     rpc_client = await kaspad_rpc_client()
     request = {"addresses": body.addresses}
     if rpc_client:
-        balances = await rpc_client.get_balances_by_addresses(request)
+        balances = await wait_for(rpc_client.get_balances_by_addresses(request), 10)
     else:
         resp = await kaspad_client.request("getBalancesByAddressesRequest", request)
         if resp.get("error"):

@@ -1,4 +1,5 @@
 # encoding: utf-8
+from asyncio import wait_for
 
 from fastapi import Path, HTTPException
 from kaspa_script_address.kaspa_script_address import to_script
@@ -29,7 +30,7 @@ async def get_balance_from_kaspa_address(
     rpc_client = await kaspad_rpc_client()
     request = {"address": kaspaAddress}
     if rpc_client:
-        balance = await rpc_client.get_balance_by_address(request)
+        balance = await wait_for(rpc_client.get_balance_by_address(request), 10)
     else:
         resp = await kaspad_client.request("getBalanceByAddressRequest", request)
         if resp.get("error"):

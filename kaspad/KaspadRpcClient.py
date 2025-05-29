@@ -15,6 +15,4 @@ async def kaspad_rpc_client() -> RpcClient:
                 kaspad_rpc_client.client = RpcClient(url=KASPAD_WRPC_URL)
         if not kaspad_rpc_client.client.is_connected:
             await wait_for(kaspad_rpc_client.client.connect(), timeout=10.0)
-        else:
-            await wait_for(kaspad_rpc_client.client.ping(), timeout=10.0)
         return kaspad_rpc_client.client
