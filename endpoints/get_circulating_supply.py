@@ -52,4 +52,4 @@ async def get_total_coins(in_billion: bool = False):
     """
     Get total amount of $KAS token as numerical value
     """
-    return get_circulating_coins(in_billion)
+    return await get_circulating_coins(in_billion)
