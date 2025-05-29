@@ -424,6 +424,9 @@ async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_
                 .order_by(TransactionInput.transaction_id, TransactionInput.index)
             )
             for tx_input in tx_inputs.scalars().all():
+                if resolve_previous_outpoints == "no" and PREV_OUT_RESOLVED:
+                    tx_input.previous_outpoint_script = None
+                    tx_input.previous_outpoint_amount = None
                 tx_inputs_dict[tx_input.transaction_id].append(tx_input)
         return tx_inputs_dict
 
