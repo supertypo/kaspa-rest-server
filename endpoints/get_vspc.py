@@ -1,4 +1,5 @@
 # encoding: utf-8
+from asyncio import wait_for
 from typing import List
 
 from fastapi import HTTPException
@@ -31,7 +32,7 @@ async def get_virtual_selected_parent_chain_from_block(startHash: str, includeAc
     rpc_client = await kaspad_rpc_client()
     request = {"startHash": startHash, "includeAcceptedTransactionIds": includeAcceptedTransactionIds}
     if rpc_client:
-        return await rpc_client.get_virtual_chain_from_block(request)
+        return await wait_for(rpc_client.get_virtual_chain_from_block(request), 60)
     else:
         resp = await kaspad_client.request("getVirtualChainFromBlockRequest", request)
         if resp.get("error"):

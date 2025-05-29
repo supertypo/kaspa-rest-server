@@ -1,6 +1,7 @@
 # encoding: utf-8
 import hashlib
 import time
+from asyncio import wait_for
 from typing import List
 
 from pydantic import BaseModel
@@ -99,9 +100,9 @@ async def health_state():
 
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
-        rpc_client_info = await rpc_client.get_info()
+        rpc_client_info = await wait_for(rpc_client.get_info(), 10)
         rpc_client_info["p2pId"] = hashlib.sha256(rpc_client_info["p2pId"].encode()).hexdigest()
-        rpc_client_info["blueScore"] = (await rpc_client.get_sink_blue_score())["blueScore"]
+        rpc_client_info["blueScore"] = (await wait_for(rpc_client.get_sink_blue_score(), 10))["blueScore"]
         result["kaspadServerRpc"] = rpc_client_info
         if not rpc_client_info.get("isSynced", True):
             return JSONResponse(status_code=503, content=result)

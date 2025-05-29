@@ -1,5 +1,6 @@
 # encoding: utf-8
 import re
+from asyncio import wait_for
 from typing import List
 
 from fastapi import Path, HTTPException
@@ -98,7 +99,7 @@ async def get_utxos(addresses):
     rpc_client = await kaspad_rpc_client()
     request = {"addresses": addresses}
     if rpc_client:
-        utxos = await rpc_client.get_utxos_by_addresses(request)
+        utxos = await wait_for(rpc_client.get_utxos_by_addresses(request), 60)
         for utxo in utxos["entries"]:
             spk = utxo["utxoEntry"]["scriptPublicKey"].lstrip("0")
             if len(spk) % 2 == 1:

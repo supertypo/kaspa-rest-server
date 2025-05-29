@@ -1,4 +1,5 @@
 # encoding: utf-8
+from asyncio import wait_for
 from typing import List
 
 from fastapi import HTTPException
@@ -27,7 +28,7 @@ async def get_blockdag():
     """
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
-        return await rpc_client.get_block_dag_info()
+        return await wait_for(rpc_client.get_block_dag_info(), 10)
     else:
         resp = await kaspad_client.request("getBlockDagInfoRequest")
         if resp.get("error"):

@@ -13,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from constants import KASPAD_WRPC_URL
 from dbsession import async_session
 from helper.StrictRoute import StrictRoute
 from helper.LimitUploadSize import LimitUploadSize
@@ -112,8 +113,8 @@ for i in range(100):
     except KeyError:
         break
 
-if not kaspad_hosts:
-    raise Exception("Please set at least KASPAD_HOST_1 environment variable.")
+if not kaspad_hosts and not KASPAD_WRPC_URL:
+    raise Exception("Please set KASPAD_WRPC_URL or KASPAD_HOST_1 environment variable.")
 
 kaspad_client = KaspadMultiClient(kaspad_hosts)
 

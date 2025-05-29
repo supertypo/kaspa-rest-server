@@ -1,4 +1,6 @@
 # encoding: utf-8
+from asyncio import wait_for
+
 from fastapi import HTTPException
 from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
@@ -20,7 +22,7 @@ async def get_virtual_selected_parent_blue_score():
     """
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
-        return await rpc_client.get_sink_blue_score()
+        return await wait_for(rpc_client.get_sink_blue_score(), 10)
     else:
         resp = await kaspad_client.request("getSinkBlueScoreRequest")
         if resp.get("error"):
