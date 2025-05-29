@@ -3,7 +3,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from fastapi import Path, HTTPException, Query
 from pydantic import BaseModel
@@ -105,6 +105,11 @@ class PreviousOutpointLookupMode(str, Enum):
     no = "no"
     light = "light"
     full = "full"
+
+
+class AcceptanceMode(str, Enum):
+    accepted = "accepted"
+    rejected = "rejected"
 
 
 @app.get(
@@ -220,9 +225,12 @@ async def get_transaction(
 @sql_db_only
 async def search_for_transactions(
     txSearch: TxSearch,
-    fields: str = "",
+    fields: str = Query(default=""),
     resolve_previous_outpoints: PreviousOutpointLookupMode = Query(
         default=PreviousOutpointLookupMode.no, description=DESC_RESOLVE_PARAM
+    ),
+    acceptance: Optional[AcceptanceMode] = Query(
+        default=None, description="Only used when searching using transactionIds"
     ),
 ):
     """
@@ -282,6 +290,10 @@ async def search_for_transactions(
                 transaction_ids = [row.Transaction.transaction_id for row in tx_list]
             else:
                 tx_query = tx_query.filter(Transaction.transaction_id.in_(transaction_ids))
+                if acceptance == AcceptanceMode.accepted:
+                    tx_query = tx_query.filter(TransactionAcceptance.transaction_id.is_not(None))
+                elif acceptance == AcceptanceMode.rejected:
+                    tx_query = tx_query.filter(TransactionAcceptance.transaction_id.is_(None))
                 tx_list = (await session.execute(tx_query)).all()
                 if not tx_list:
                     return []
