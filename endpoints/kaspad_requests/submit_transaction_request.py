@@ -30,7 +30,6 @@ class SubmitTxScriptPublicKey(BaseModel):
 class SubmitTxOutput(BaseModel):
     amount: int
     scriptPublicKey: SubmitTxScriptPublicKey
-    # verboseData: TxOutputVerboseData | None
 
 
 class SubmitTxModel(BaseModel):
@@ -65,22 +64,25 @@ async def submit_a_new_transaction(
     body: SubmitTransactionRequest,
     replaceByFee: bool = Query(description="Replace an existing transaction in the mempool", default=False),
 ):
+    request = body.dict()
     rpc_client = await kaspad_rpc_client()
     if replaceByFee:
         # Replace by fee doesn't have the allowOrphan attribute
-        body = SubmitTransactionReplacementRequest(transaction=body.transaction)
+        request.pop("allowOrphan", None)
         if rpc_client:
-            tx_resp = await wait_for(rpc_client.submit_transaction_replacement(body.dict()), 10)
+            convert_from_legacy_tx(request.get("transaction"))
+            tx_resp = await wait_for(rpc_client.submit_transaction_replacement(request), 10)
         else:
-            resp = await kaspad_client.request("submitTransactionReplacementRequest", body.dict())
+            resp = await kaspad_client.request("submitTransactionReplacementRequest", request)
             if resp.get("error"):
                 raise HTTPException(500, resp["error"])
             tx_resp = resp["submitTransactionReplacementResponse"]
     else:
         if rpc_client:
-            tx_resp = await wait_for(rpc_client.submit_transaction(body.dict()), 10)
+            convert_from_legacy_tx(request.get("transaction"))
+            tx_resp = await wait_for(rpc_client.submit_transaction(request), 10)
         else:
-            resp = await kaspad_client.request("submitTransactionRequest", body.dict())
+            resp = await kaspad_client.request("submitTransactionRequest", request)
             if resp.get("error"):
                 raise HTTPException(500, resp["error"])
             tx_resp = resp["submitTransactionResponse"]
@@ -95,6 +97,14 @@ async def submit_a_new_transaction(
     # something else went wrong
     else:
         return JSONResponse(status_code=400, content={"error": str(tx_resp)})
+
+
+def convert_from_legacy_tx(transaction):
+    if not transaction:
+        return
+    for tx_output in transaction.get("outputs", []):
+        tx_output["value"] = tx_output.pop("amount", None)
+        tx_output["scriptPublicKey"] = tx_output.get("scriptPublicKey", {}).get("scriptPublicKey")
 
 
 """
