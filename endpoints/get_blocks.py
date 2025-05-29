@@ -467,8 +467,15 @@ def convert_to_legacy_block(block: dict) -> dict:
     for tx in block.get("transactions", []):
         for tx_output in tx.get("outputs", []):
             tx_output["amount"] = tx_output.get("value")
-            script_public_key = (
-                tx_output.get("scriptPublicKey").lstrip("0") if tx_output.get("scriptPublicKey") else None
-            )
-            tx_output["scriptPublicKey"] = {"scriptPublicKey": script_public_key, "version": 0}
+            tx_output_script_public_key = tx_output.get("scriptPublicKey")
+            if tx_output_script_public_key:
+                tx_output["scriptPublicKey"] = {
+                    "scriptPublicKey": tx_output_script_public_key.lstrip("0"),
+                    "version": 0,
+                }
+            tx_output_verbose_data = tx_output.get("verboseData")
+            if tx_output_verbose_data:
+                script_public_key_type = tx_output_verbose_data.get("scriptPublicKeyType")
+                if script_public_key_type:
+                    tx_output_verbose_data["scriptPublicKeyType"] = script_public_key_type.lower()
     return block
