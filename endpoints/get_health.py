@@ -8,7 +8,7 @@ from sqlalchemy import select
 from fastapi.responses import JSONResponse
 from kaspad.KaspadRpcClient import kaspad_rpc_client
 
-from constants import BPS, HEALTH_TOLERANCE_DOWN, KASPAD_WRPC_URL
+from constants import BPS, HEALTH_TOLERANCE_DOWN
 from dbsession import async_session_blocks, async_session
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from models.Block import Block
@@ -18,7 +18,7 @@ from server import app, kaspad_client
 
 
 class KaspadResponse(BaseModel):
-    kaspadHost: str = ""
+    kaspadHost: str | None
     serverVersion: str = "0.12.6"
     isUtxoIndexed: bool = True
     isSynced: bool = True
@@ -100,7 +100,7 @@ async def health_state():
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
         rpc_client_info = await rpc_client.get_info()
-        rpc_client_info["kaspadHost"] = KASPAD_WRPC_URL
+        rpc_client_info["p2pId"] = hashlib.sha256(rpc_client_info["p2pId"].encode()).hexdigest()
         rpc_client_info["blueScore"] = (await rpc_client.get_sink_blue_score())["blueScore"]
         result["kaspadServerRpc"] = rpc_client_info
         if not rpc_client_info.get("isSynced", True):
