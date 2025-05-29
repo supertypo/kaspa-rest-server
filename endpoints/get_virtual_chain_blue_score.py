@@ -1,4 +1,5 @@
 # encoding: utf-8
+import logging
 from asyncio import wait_for
 
 from fastapi import HTTPException
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from kaspad.KaspadRpcClient import kaspad_rpc_client
 from server import app, kaspad_client
 
+_logger = logging.getLogger(__name__)
 current_blue_score_data = {"blue_score": 0}
 
 
@@ -34,5 +36,6 @@ async def get_virtual_selected_parent_blue_score():
 @repeat_every(seconds=5)
 async def update_blue_score():
     global current_blue_score_data
-    blue_score = await get_virtual_selected_parent_blue_score
+    blue_score = await get_virtual_selected_parent_blue_score()
     current_blue_score_data["blue_score"] = int(blue_score["blueScore"])
+    logging.debug(f"Updated current_blue_score: {current_blue_score_data['blue_score']}")
