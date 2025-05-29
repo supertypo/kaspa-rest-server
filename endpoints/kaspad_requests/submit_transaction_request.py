@@ -45,10 +45,6 @@ class SubmitTransactionRequest(BaseModel):
     allowOrphan: bool = False
 
 
-class SubmitTransactionReplacementRequest(BaseModel):
-    transaction: SubmitTxModel
-
-
 class SubmitTransactionResponse(BaseModel):
     transactionId: str | None
     error: str | None
@@ -102,6 +98,11 @@ async def submit_a_new_transaction(
 def convert_from_legacy_tx(transaction):
     if not transaction:
         return
+    transaction["lockTime"] = transaction.get("lockTime") or 0
+    transaction["subnetworkId"] = transaction.get("subnetworkId") or "0000000000000000000000000000000000000000"
+    transaction["gas"] = transaction.get("gas") or 0
+    transaction["payload"] = transaction.get("payload") or ""
+    transaction["mass"] = transaction.get("mass") or 0
     for tx_output in transaction.get("outputs", []):
         tx_output["value"] = tx_output.pop("amount", None)
         tx_output["scriptPublicKey"] = tx_output.get("scriptPublicKey", {}).get("scriptPublicKey")
