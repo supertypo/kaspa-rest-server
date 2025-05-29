@@ -1,28 +1,36 @@
 # encoding: utf-8
+from fastapi import HTTPException
 from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
 
+from kaspad.KaspadRpcClient import kaspad_rpc_client
 from server import app, kaspad_client
 
 current_blue_score_data = {"blue_score": 0}
 
 
-class BlockdagResponse(BaseModel):
+class BlueScoreResponse(BaseModel):
     blueScore: int = 260890
 
 
-@app.get("/info/virtual-chain-blue-score", response_model=BlockdagResponse, tags=["Kaspa network info"])
+@app.get("/info/virtual-chain-blue-score", response_model=BlueScoreResponse, tags=["Kaspa network info"])
 async def get_virtual_selected_parent_blue_score():
     """
-    Returns the blue score of virtual selected parent
+    Returns the blue score of the sink
     """
-    resp = await kaspad_client.request("getSinkBlueScoreRequest")
-    return resp["getSinkBlueScoreResponse"]
+    rpc_client = await kaspad_rpc_client()
+    if rpc_client:
+        return await rpc_client.get_sink_blue_score()
+    else:
+        resp = await kaspad_client.request("getSinkBlueScoreRequest")
+        if resp.get("error"):
+            raise HTTPException(500, resp["error"])
+        return resp["getSinkBlueScoreResponse"]
 
 
 @app.on_event("startup")
 @repeat_every(seconds=5)
 async def update_blue_score():
     global current_blue_score_data
-    resp = await kaspad_client.request("getSinkBlueScoreRequest")
-    current_blue_score_data["blue_score"] = int(resp["getSinkBlueScoreResponse"]["blueScore"])
+    blue_score = await get_virtual_selected_parent_blue_score
+    current_blue_score_data["blue_score"] = int(blue_score["blueScore"])

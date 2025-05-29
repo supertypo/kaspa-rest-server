@@ -469,8 +469,11 @@ def convert_to_legacy_block(block: dict) -> dict:
             tx_output["amount"] = tx_output.get("value")
             tx_output_script_public_key = tx_output.get("scriptPublicKey")
             if tx_output_script_public_key:
+                tx_output_script_public_key = tx_output_script_public_key.lstrip("0")
+                if len(tx_output_script_public_key) % 2 == 1:
+                    tx_output_script_public_key = "0" + tx_output_script_public_key
                 tx_output["scriptPublicKey"] = {
-                    "scriptPublicKey": tx_output_script_public_key.lstrip("0"),
+                    "scriptPublicKey": tx_output_script_public_key,
                     "version": 0,
                 }
             tx_output_verbose_data = tx_output.get("verboseData")

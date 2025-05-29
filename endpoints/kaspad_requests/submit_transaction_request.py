@@ -2,10 +2,11 @@
 
 from typing import List
 
-from fastapi import Query
+from fastapi import Query, HTTPException
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
+from kaspad.KaspadRpcClient import kaspad_rpc_client
 from server import app, kaspad_client
 
 
@@ -64,14 +65,25 @@ async def submit_a_new_transaction(
     body: SubmitTransactionRequest,
     replaceByFee: bool = Query(description="Replace an existing transaction in the mempool", default=False),
 ):
+    rpc_client = await kaspad_rpc_client()
     if replaceByFee:
         # Replace by fee doesn't have the allowOrphan attribute
         body = SubmitTransactionReplacementRequest(transaction=body.transaction)
-        tx_resp = await kaspad_client.request("submitTransactionReplacementRequest", params=body.dict())
-        tx_resp = tx_resp["submitTransactionReplacementResponse"]
+        if rpc_client:
+            tx_resp = await rpc_client.submit_transaction_replacement(body.dict())
+        else:
+            resp = await kaspad_client.request("submitTransactionReplacementRequest", body.dict())
+            if resp.get("error"):
+                raise HTTPException(500, resp["error"])
+            tx_resp = resp["submitTransactionReplacementResponse"]
     else:
-        tx_resp = await kaspad_client.request("submitTransactionRequest", params=body.dict())
-        tx_resp = tx_resp["submitTransactionResponse"]
+        if rpc_client:
+            tx_resp = await rpc_client.submit_transaction(body.dict())
+        else:
+            resp = await kaspad_client.request("submitTransactionRequest", body.dict())
+            if resp.get("error"):
+                raise HTTPException(500, resp["error"])
+            tx_resp = resp["submitTransactionResponse"]
 
     if "error" in tx_resp:
         return JSONResponse(status_code=400, content={"error": tx_resp["error"].get("message", "")})
