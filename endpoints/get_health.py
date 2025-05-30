@@ -1,5 +1,6 @@
 # encoding: utf-8
 import hashlib
+import logging
 import time
 from asyncio import wait_for
 from typing import List
@@ -16,6 +17,9 @@ from models.Block import Block
 from models.Transaction import Transaction
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
+
+
+_logger = logging.getLogger(__name__)
 
 
 class KaspadResponse(BaseModel):
@@ -36,7 +40,6 @@ class DBCheckStatus(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    kaspadServerRpc: KaspadResponse | None
     kaspadServers: List[KaspadResponse]
     database: DBCheckStatus
 
@@ -81,33 +84,48 @@ async def health_state():
 
     await kaspad_client.initialize_all()
     kaspads = []
-    for i, kaspad in enumerate(kaspad_client.kaspads):
-        kaspads.append(
-            {
+
+    rpc_client = await kaspad_rpc_client()
+    if rpc_client:
+        kaspad = {
+            "kaspadHost": "wrpc",
+            "isUtxoIndexed": False,
+            "isSynced": False,
+        }
+        try:
+            rpc_client_info = await wait_for(rpc_client.get_info(), 10)
+            kaspad["serverVersion"] = rpc_client_info["serverVersion"]
+            kaspad["isUtxoIndexed"] = rpc_client_info["isUtxoIndexed"]
+            kaspad["isSynced"] = rpc_client_info["isSynced"]
+            kaspad["p2pId"] = hashlib.sha256(rpc_client_info["p2pId"].encode()).hexdigest()
+            kaspad["blueScore"] = (await wait_for(rpc_client.get_sink_blue_score(), 10))["blueScore"]
+        except Exception as err:
+            _logger.error("Kaspad health check failed %s", err)
+        kaspads.append(kaspad)
+
+    elif kaspad_client.kaspads:
+        for i, k in enumerate(kaspad_client.kaspads):
+            kaspad = {
                 "kaspadHost": f"KASPAD_HOST_{i + 1}",
-                "serverVersion": kaspad.server_version,
-                "isUtxoIndexed": kaspad.is_utxo_indexed,
-                "isSynced": kaspad.is_synced,
-                "p2pId": hashlib.sha256(kaspad.p2p_id.encode()).hexdigest(),
-                "blueScore": current_blue_score_node,
+                "isUtxoIndexed": False,
+                "isSynced": False,
             }
-        )
+            try:
+                kaspad["serverVersion"] = k.server_version
+                kaspad["isUtxoIndexed"] = k.is_utxo_indexed
+                kaspad["isSynced"] = k.is_synced
+                kaspad["p2pId"] = hashlib.sha256(k.p2p_id.encode()).hexdigest()
+                kaspad["blueScore"] = current_blue_score_node
+            except Exception as err:
+                _logger.error("Kaspad health check failed %s", err)
+            kaspads.append(kaspad)
 
     result = {
         "kaspadServers": kaspads,
         "database": db_check_status.dict(),
     }
 
-    rpc_client = await kaspad_rpc_client()
-    if rpc_client:
-        rpc_client_info = await wait_for(rpc_client.get_info(), 10)
-        rpc_client_info["p2pId"] = hashlib.sha256(rpc_client_info["p2pId"].encode()).hexdigest()
-        rpc_client_info["blueScore"] = (await wait_for(rpc_client.get_sink_blue_score(), 10))["blueScore"]
-        result["kaspadServerRpc"] = rpc_client_info
-        if not rpc_client_info.get("isSynced", True):
-            return JSONResponse(status_code=503, content=result)
-
-    if not db_check_status.isSynced or (kaspads and not any(kaspad["isSynced"] for kaspad in kaspads)):
+    if not db_check_status.isSynced or not any(kaspad["isSynced"] for kaspad in kaspads):
         return JSONResponse(status_code=503, content=result)
 
     return result

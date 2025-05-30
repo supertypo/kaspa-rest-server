@@ -1,6 +1,7 @@
 # encoding: utf-8
 import logging
 import os
+from asyncio import wait_for
 from typing import Optional
 
 import fastapi.logger
@@ -18,6 +19,7 @@ from dbsession import async_session
 from helper.StrictRoute import StrictRoute
 from helper.LimitUploadSize import LimitUploadSize
 from kaspad.KaspadMultiClient import KaspadMultiClient
+from kaspad.KaspadRpcClient import kaspad_rpc_client
 
 fastapi.logger.logger.setLevel(logging.WARNING)
 
@@ -58,6 +60,7 @@ app.add_middleware(CacheControlMiddleware)
 
 class KaspadStatus(BaseModel):
     is_online: bool = False
+    is_wrpc: bool = False
     server_version: Optional[str] = None
     is_utxo_indexed: Optional[bool] = None
     is_synced: Optional[bool] = None
@@ -79,16 +82,27 @@ async def ping_server():
     """
     result = PingResponse()
 
-    error = False
-    try:
-        info = await kaspad_client.kaspads[0].request("getInfoRequest")
-        result.kaspad.is_online = True
-        result.kaspad.server_version = info["getInfoResponse"]["serverVersion"]
-        result.kaspad.is_utxo_indexed = info["getInfoResponse"]["isUtxoIndexed"]
-        result.kaspad.is_synced = info["getInfoResponse"]["isSynced"]
-    except Exception as err:
-        _logger.error("Kaspad health check failed %s", err)
-        error = True
+    rpc_client = await kaspad_rpc_client()
+    if rpc_client:
+        result.kaspad.is_wrpc = True
+        try:
+            info = await wait_for(rpc_client.get_info(), 10)
+            result.kaspad.is_online = True
+            result.kaspad.server_version = info["serverVersion"]
+            result.kaspad.is_utxo_indexed = info["isUtxoIndexed"]
+            result.kaspad.is_synced = info["isSynced"]
+        except Exception as err:
+            _logger.error(f"Kaspad health check failed {str(err)}")
+
+    elif kaspad_client.kaspads:
+        try:
+            info = await kaspad_client.kaspads[0].request("getInfoRequest")
+            result.kaspad.is_online = True
+            result.kaspad.server_version = info["getInfoResponse"]["serverVersion"]
+            result.kaspad.is_utxo_indexed = info["getInfoResponse"]["isUtxoIndexed"]
+            result.kaspad.is_synced = info["getInfoResponse"]["isSynced"]
+        except Exception as err:
+            _logger.error("Kaspad health check failed %s", err)
 
     if os.getenv("SQL_URI") is not None:
         async with async_session() as session:
@@ -97,10 +111,9 @@ async def ping_server():
                 result.database.is_online = True
             except Exception as err:
                 _logger.error("Database health check failed %s", err)
-                error = True
 
-    if error or not result.kaspad.is_synced:
-        return JSONResponse(status_code=500, content=result.dict())
+    if not result.database.is_online or not result.kaspad.is_synced:
+        return JSONResponse(status_code=503, content=result.dict())
 
     return result
 
