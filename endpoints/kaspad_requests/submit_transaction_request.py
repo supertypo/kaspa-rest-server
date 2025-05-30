@@ -3,6 +3,14 @@ from asyncio import wait_for
 from typing import List
 
 from fastapi import Query, HTTPException
+from kaspa import (
+    Transaction,
+    TransactionInput,
+    TransactionOutpoint,
+    TransactionOutput,
+    ScriptPublicKey,
+    Hash,
+)
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -60,25 +68,32 @@ async def submit_a_new_transaction(
     body: SubmitTransactionRequest,
     replaceByFee: bool = Query(description="Replace an existing transaction in the mempool", default=False),
 ):
-    request = body.dict()
     rpc_client = await kaspad_rpc_client()
     if replaceByFee:
-        # Replace by fee doesn't have the allowOrphan attribute
-        request.pop("allowOrphan", None)
         if rpc_client:
-            convert_from_legacy_tx(request.get("transaction"))
-            tx_resp = await wait_for(rpc_client.submit_transaction_replacement(request), 10)
+            tx = convert_from_legacy_tx(body.transaction)
+            try:
+                tx_resp = await wait_for(rpc_client.submit_transaction_replacement({"transaction": tx}), 10)
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
         else:
-            resp = await kaspad_client.request("submitTransactionReplacementRequest", request)
+            resp = await kaspad_client.request(
+                "submitTransactionReplacementRequest", {"transaction": body.transaction.dict()}
+            )
             if resp.get("error"):
                 raise HTTPException(500, resp["error"])
             tx_resp = resp["submitTransactionReplacementResponse"]
     else:
         if rpc_client:
-            convert_from_legacy_tx(request.get("transaction"))
-            tx_resp = await wait_for(rpc_client.submit_transaction(request), 10)
+            tx = convert_from_legacy_tx(body.transaction)
+            try:
+                tx_resp = await wait_for(
+                    rpc_client.submit_transaction({"allow_orphan": body.allowOrphan, "transaction": tx}), 10
+                )
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
         else:
-            resp = await kaspad_client.request("submitTransactionRequest", request)
+            resp = await kaspad_client.request("submitTransactionRequest", body.dict())
             if resp.get("error"):
                 raise HTTPException(500, resp["error"])
             tx_resp = resp["submitTransactionResponse"]
@@ -86,26 +101,37 @@ async def submit_a_new_transaction(
     if "error" in tx_resp:
         return JSONResponse(status_code=400, content={"error": tx_resp["error"].get("message", "")})
 
-    # if transactionId is in response
     elif "transactionId" in tx_resp:
         return {"transactionId": tx_resp["transactionId"]}
 
-    # something else went wrong
     else:
-        return JSONResponse(status_code=400, content={"error": str(tx_resp)})
+        return JSONResponse(status_code=500, content={"error": str(tx_resp)})
 
 
-def convert_from_legacy_tx(transaction):
+def convert_from_legacy_tx(transaction: SubmitTxModel) -> Transaction | None:
     if not transaction:
         return
-    transaction["lockTime"] = transaction.get("lockTime") or 0
-    transaction["subnetworkId"] = transaction.get("subnetworkId") or "0000000000000000000000000000000000000000"
-    transaction["gas"] = transaction.get("gas") or 0
-    transaction["payload"] = transaction.get("payload") or ""
-    transaction["mass"] = transaction.get("mass") or 0
-    for tx_output in transaction.get("outputs", []):
-        tx_output["value"] = tx_output.pop("amount", None)
-        tx_output["scriptPublicKey"] = tx_output.get("scriptPublicKey", {}).get("scriptPublicKey")
+    return Transaction(
+        transaction.version,
+        [
+            TransactionInput(
+                TransactionOutpoint(Hash(i.previousOutpoint.transactionId), i.previousOutpoint.index),
+                i.signatureScript,
+                i.sequence,
+                i.sigOpCount,
+            )
+            for i in transaction.inputs
+        ],
+        [
+            TransactionOutput(o.amount, ScriptPublicKey(o.scriptPublicKey.version, o.scriptPublicKey.scriptPublicKey))
+            for o in transaction.outputs
+        ],
+        transaction.lockTime or 0,
+        transaction.subnetworkId or "0000000000000000000000000000000000000000",
+        0,
+        "",
+        0,
+    )
 
 
 """
