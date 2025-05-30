@@ -1,4 +1,5 @@
 # encoding: utf-8
+import logging
 from asyncio import wait_for
 from typing import List
 
@@ -16,6 +17,8 @@ from starlette.responses import JSONResponse
 
 from kaspad.KaspadRpcClient import kaspad_rpc_client
 from server import app, kaspad_client
+
+_logger = logging.getLogger(__name__)
 
 
 class SubmitTxOutpoint(BaseModel):
@@ -75,12 +78,14 @@ async def submit_a_new_transaction(
             try:
                 tx_resp = await wait_for(rpc_client.submit_transaction_replacement({"transaction": tx}), 10)
             except Exception as e:
+                logging.warning(f"Failed submitting transaction, error (w1r): {str(e)}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
         else:
             resp = await kaspad_client.request(
                 "submitTransactionReplacementRequest", {"transaction": body.transaction.dict()}
             )
             if resp.get("error"):
+                logging.warning(f"Failed submitting transaction, error (g1r): {resp['error']}")
                 raise HTTPException(500, resp["error"])
             tx_resp = resp["submitTransactionReplacementResponse"]
     else:
@@ -91,20 +96,23 @@ async def submit_a_new_transaction(
                     rpc_client.submit_transaction({"allow_orphan": body.allowOrphan, "transaction": tx}), 10
                 )
             except Exception as e:
+                logging.warning(f"Failed submitting transaction, error (w1): {str(e)}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
         else:
             resp = await kaspad_client.request("submitTransactionRequest", body.dict())
             if resp.get("error"):
+                logging.warning(f"Failed submitting transaction, error (g1): {resp['error']}")
                 raise HTTPException(500, resp["error"])
             tx_resp = resp["submitTransactionResponse"]
 
     if "error" in tx_resp:
+        logging.warning(f"Failed submitting transaction, error (2): {tx_resp['error'].get('message', '')}")
         return JSONResponse(status_code=400, content={"error": tx_resp["error"].get("message", "")})
-
     elif "transactionId" in tx_resp:
+        logging.info(f"Successfully submitted transaction: {tx_resp['transactionId']}")
         return {"transactionId": tx_resp["transactionId"]}
-
     else:
+        logging.warning(f"Failed submitting transaction, error (3): {str(tx_resp)}")
         return JSONResponse(status_code=500, content={"error": str(tx_resp)})
 
 
