@@ -107,7 +107,7 @@ async def health_state():
         if not rpc_client_info.get("isSynced", True):
             return JSONResponse(status_code=503, content=result)
 
-    if not db_check_status.isSynced or not any(kaspad["isSynced"] for kaspad in kaspads):
+    if not db_check_status.isSynced or (kaspads and not any(kaspad["isSynced"] for kaspad in kaspads)):
         return JSONResponse(status_code=503, content=result)
 
     return result
