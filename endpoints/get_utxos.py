@@ -92,7 +92,7 @@ async def get_utxos_for_addresses(body: UtxoRequest):
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
 
-    return get_utxos(body.addresses)
+    return await get_utxos(body.addresses)
 
 
 async def get_utxos(addresses):
