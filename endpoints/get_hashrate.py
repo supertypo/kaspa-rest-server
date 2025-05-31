@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, text, func
 from starlette.responses import Response
 
-from constants import BPS
+from constants import BPS, HASHRATE_HISTORY
 from dbsession import async_session_blocks
 from endpoints import sql_db_only
 from endpoints.get_virtual_chain_blue_score import get_virtual_selected_parent_blue_score
@@ -172,13 +172,15 @@ async def get_hashrate_history(response: Response, limit: Optional[Literal[10]] 
         ]
 
 
-@app.on_event("startup")
-async def create_hashrate_history_table_scheduled():
-    try:
-        await create_hashrate_history_table()
-    except Exception as e:
-        _logger.exception(e)
-        _logger.error("Hashrate history: update failed")
+if HASHRATE_HISTORY:
+
+    @app.on_event("startup")
+    async def create_hashrate_history_table_scheduled():
+        try:
+            await create_hashrate_history_table()
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error("Hashrate history: update failed")
 
 
 async def create_hashrate_history_table():
@@ -217,14 +219,16 @@ async def create_hashrate_history_table():
             _logger.error(f"Hashrate history: Failed to create table, create it manually: \n{create_table_sql}")
 
 
-@app.on_event("startup")
-@repeat_every(seconds=1800)
-async def update_hashrate_history_scheduled():
-    try:
-        await update_hashrate_history()
-    except Exception as e:
-        _logger.exception(e)
-        _logger.error("Hashrate history: update failed")
+if HASHRATE_HISTORY:
+
+    @app.on_event("startup")
+    @repeat_every(seconds=1800)
+    async def update_hashrate_history_scheduled():
+        try:
+            await update_hashrate_history()
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error("Hashrate history: update failed")
 
 
 async def update_hashrate_history():
@@ -294,3 +298,4 @@ async def get_hashrate_history_lock(s):
     except Exception as e:
         _logger.exception(e)
         _logger.error("Hashrate history: unable to aquire advisory lock (123100)")
+        raise e
