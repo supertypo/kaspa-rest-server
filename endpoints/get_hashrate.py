@@ -173,6 +173,14 @@ async def get_hashrate_history(response: Response, limit: Optional[Literal[10]] 
 
 
 @app.on_event("startup")
+async def create_hashrate_history_table_scheduled():
+    try:
+        await create_hashrate_history_table()
+    except Exception as e:
+        _logger.exception(e)
+        _logger.error("Hashrate history: update failed")
+
+
 async def create_hashrate_history_table():
     global _hashrate_table_exists
 
@@ -211,6 +219,14 @@ async def create_hashrate_history_table():
 
 @app.on_event("startup")
 @repeat_every(seconds=1800)
+async def update_hashrate_history_scheduled():
+    try:
+        await update_hashrate_history()
+    except Exception as e:
+        _logger.exception(e)
+        _logger.error("Hashrate history: update failed")
+
+
 async def update_hashrate_history():
     global _hashrate_history_updated
     sample_interval_hours = 3
@@ -268,8 +284,12 @@ async def update_hashrate_history():
 
 
 async def get_hashrate_history_lock(s):
-    result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
-    if not result.scalar():
-        _logger.info("Hashrate history: waiting for advisory lock")
-        await s.execute(text("SELECT pg_advisory_lock(123100)"))
-    _logger.debug("Hashrate history: Aquired advisory lock (123100)")
+    try:
+        result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
+        if not result.scalar():
+            _logger.info("Hashrate history: waiting for advisory lock")
+            await s.execute(text("SELECT pg_advisory_lock(123100)"))
+        _logger.debug("Hashrate history: Aquired advisory lock (123100)")
+    except Exception as e:
+        _logger.exception(e)
+        _logger.error("Hashrate history: unable to aquire advisory lock (123100)")
