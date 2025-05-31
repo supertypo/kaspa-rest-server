@@ -177,6 +177,7 @@ async def create_hashrate_history_table():
     global _hashrate_table_exists
 
     async with async_session_blocks() as s:
+        await get_hashrate_history_lock(s)
         check_table_exists_sql = text(f"""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -223,12 +224,7 @@ async def update_hashrate_history():
     sample_count = 0
     batch = []
     async with async_session_blocks() as s:
-        result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
-        if not result.scalar():
-            _logger.info("Hashrate history: waiting for advisory lock")
-            await s.execute(text("SELECT pg_advisory_lock(123100)"))
-        _logger.debug("Hashrate history: Aquired advisory lock (123100)")
-
+        await get_hashrate_history_lock(s)
         result = await s.execute(select(func.max(HashrateHistory.blue_score)))
         max_blue_score = result.scalar_one_or_none() or 0
         bps = 1 if max_blue_score < 108554145 else 10  # Crescendo
@@ -269,3 +265,11 @@ async def update_hashrate_history():
             await s.commit()
     _hashrate_history_updated = True
     _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
+
+
+async def get_hashrate_history_lock(s):
+    result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
+    if not result.scalar():
+        _logger.info("Hashrate history: waiting for advisory lock")
+        await s.execute(text("SELECT pg_advisory_lock(123100)"))
+    _logger.debug("Hashrate history: Aquired advisory lock (123100)")
