@@ -14,7 +14,7 @@ from starlette.responses import Response
 from constants import BPS
 from dbsession import async_session_blocks
 from endpoints import sql_db_only
-from endpoints.get_virtual_chain_blue_score import current_blue_score_data
+from endpoints.get_virtual_chain_blue_score import get_virtual_selected_parent_blue_score
 from helper import KeyValueStore
 from helper.difficulty_calculation import bits_to_difficulty
 from models.Block import Block
@@ -168,7 +168,7 @@ async def get_hashrate_history(response: Response, limit: Optional[Literal[10]] 
                 "difficulty": (difficulty := bits_to_difficulty(sample.bits)),
                 "hashrate_in_kh": (difficulty * 2 * (1 if sample.blue_score < 108554145 else 10)) / 1_000,
             }
-            for sample in sorted(result.scalars().all(), key=lambda sample: sample.daa_score)
+            for sample in sorted(result.scalars().all(), key=lambda sample: sample.daa_score, reverse=True)
         ]
 
 
@@ -227,13 +227,17 @@ async def update_hashrate_history():
         if not result.scalar():
             _logger.info("Hashrate history: waiting for advisory lock")
             await s.execute(text("SELECT pg_advisory_lock(123100)"))
+        _logger.debug("Hashrate history: Aquired advisory lock (123100)")
 
         result = await s.execute(select(func.max(HashrateHistory.blue_score)))
         max_blue_score = result.scalar_one_or_none() or 0
         bps = 1 if max_blue_score < 108554145 else 10  # Crescendo
-        next_blue_score = max_blue_score + (bps * 3600 * sample_interval_hours)
+        next_blue_score = 0
+        if max_blue_score > 0:
+            next_blue_score = max_blue_score + (bps * 3600 * sample_interval_hours)
 
-        while current_blue_score_data["blue_score"] > next_blue_score:
+        current_blue_score = await get_virtual_selected_parent_blue_score()
+        while int(current_blue_score["blueScore"]) > next_blue_score:
             result = await s.execute(
                 select(Block).where(Block.blue_score > next_blue_score).order_by(Block.blue_score.asc()).limit(1)
             )
@@ -255,8 +259,11 @@ async def update_hashrate_history():
                     batch.clear()
                 sample_count += 1
                 _logger.info(f"Sampled hashrate of block {block.hash} (daa={block.daa_score}, bits={block.bits})")
-            bps = 1 if block.blue_score < 108554145 else 10
-            next_blue_score = block.blue_score + (bps * 3600 * sample_interval_hours)
+            if block.daa_score < 1312860:  # blue_score was reset 2021-11-26, so sample more often before checkpoint
+                next_blue_score = block.blue_score + 3600
+            else:
+                bps = 1 if block.blue_score < 108554145 else 10
+                next_blue_score = block.blue_score + (bps * 3600 * sample_interval_hours)
         if batch:
             s.add_all(batch)
             await s.commit()
