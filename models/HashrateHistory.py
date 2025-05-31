@@ -1,9 +1,6 @@
-from sqlalchemy import Column, BigInteger, SmallInteger
+from sqlalchemy import Column, BigInteger
 
 from dbsession import Base
-from models.type_decorators.HexColumn import HexColumn
-from models.type_decorators.HexArrayColumn import HexArrayColumn
-from models.type_decorators.ByteColumn import ByteColumn
 
 
 class HashrateHistory(Base):

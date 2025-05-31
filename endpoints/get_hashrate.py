@@ -135,6 +135,7 @@ async def get_max_hashrate():
 
 
 _hashrate_table_exists = False
+_hashrate_history_updated = False
 
 
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
@@ -143,10 +144,8 @@ async def get_hashrate_history(response: Response, limit: Optional[Literal[10]] 
     Returns historical hashrate in KH/s with a resolution of ~3 hours between samples.
     Use no limit for initial fetch (updated daily), afterward use limit (updated hourly).
     """
-    if not _hashrate_table_exists:
-        raise HTTPException(
-            status_code=503, detail=f"Hashrate history is not available"
-        )
+    if not _hashrate_table_exists or not _hashrate_history_updated:
+        raise HTTPException(status_code=503, detail="Hashrate history is not available")
     if limit:
         response.headers["Cache-Control"] = "public, max-age=3600"
     else:
@@ -212,6 +211,7 @@ async def create_hashrate_history_table():
 @app.on_event("startup")
 @repeat_every(seconds=1800)
 async def update_hashrate_history():
+    global _hashrate_history_updated
     sample_interval_hours = 3
     batch_size = 1000
 
@@ -219,14 +219,14 @@ async def update_hashrate_history():
         _logger.warn(f"Hashrate history: Skipping sampling as table '{HashrateHistory.__tablename__}' doesn't exist")
         return
 
-    _logger.info(f"Hashrate history: Sampling hashrate history")
+    _logger.info("Hashrate history: Sampling hashrate history")
     sample_count = 0
     batch = []
     async with async_session_blocks() as s:
-        result = await s.execute(text(f"SELECT pg_try_advisory_lock(123100)"))
+        result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
         if not result.scalar():
-            _logger.info("Hashrate history: Skipping update (advisory lock not available)")
-            return
+            _logger.info("Hashrate history: waiting for advisory lock")
+            await s.execute(text("SELECT pg_advisory_lock(123100)"))
 
         result = await s.execute(select(func.max(HashrateHistory.blue_score)))
         max_blue_score = result.scalar_one_or_none() or 0
@@ -260,4 +260,5 @@ async def update_hashrate_history():
         if batch:
             s.add_all(batch)
             await s.commit()
+    _hashrate_history_updated = True
     _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
