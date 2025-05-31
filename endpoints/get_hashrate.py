@@ -2,10 +2,14 @@
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Optional, Literal
 
+from fastapi import HTTPException
+from fastapi.params import Query
 from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
 from sqlalchemy import select, text, func
+from starlette.responses import Response
 
 from constants import BPS
 from dbsession import async_session_blocks
@@ -38,8 +42,8 @@ class MaxHashrateResponse(BaseModel):
 
 
 class HashrateHistoryResponse(BaseModel):
-    blueScore: int
     daaScore: int
+    blueScore: int
     timestamp: int
     date_time: str
     bits: int
@@ -130,17 +134,33 @@ async def get_max_hashrate():
     return maxhash_last_value
 
 
+_hashrate_table_exists = False
+
+
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
-async def get_hashrate_history():
+async def get_hashrate_history(response: Response, limit: Optional[Literal[10]] = Query(default=None)):
     """
     Returns historical hashrate in KH/s with a resolution of ~3 hours between samples.
+    Use no limit for initial fetch (updated daily), afterward use limit (updated hourly).
     """
+    if not _hashrate_table_exists:
+        raise HTTPException(
+            status_code=503, detail=f"Hashrate history is not available"
+        )
+    if limit:
+        response.headers["Cache-Control"] = "public, max-age=3600"
+    else:
+        response.headers["Cache-Control"] = "public, max-age=86400"
+
     async with async_session_blocks() as s:
-        result = await s.execute(select(HashrateHistory).order_by(HashrateHistory.blue_score.desc()))
+        stmt = select(HashrateHistory).order_by(HashrateHistory.blue_score.desc())
+        if limit:
+            stmt = stmt.limit(limit)
+        result = await s.execute(stmt)
         return [
             {
-                "blueScore": sample.blue_score,
                 "daaScore": sample.daa_score,
+                "blueScore": sample.blue_score,
                 "timestamp": sample.timestamp,
                 "date_time": datetime.fromtimestamp(sample.timestamp / 1000, tz=timezone.utc).isoformat(
                     timespec="milliseconds"
@@ -151,9 +171,6 @@ async def get_hashrate_history():
             }
             for sample in sorted(result.scalars().all(), key=lambda sample: sample.daa_score)
         ]
-
-
-_hashrate_table_exists = False
 
 
 @app.on_event("startup")
