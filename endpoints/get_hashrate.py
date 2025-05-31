@@ -271,9 +271,7 @@ async def update_hashrate_history():
                     batch.clear()
                 sample_count += 1
                 t = datetime.fromtimestamp(block.timestamp / 1000, tz=timezone.utc).isoformat(timespec="seconds")
-                _logger.info(
-                    f"Sampled hashrate: daa={block.daa_score}, timestamp={t}, bits={block.bits}"
-                )
+                _logger.info(f"Sampled hashrate: daa={block.daa_score}, timestamp={t}, bits={block.bits}")
             if block.blue_score < 1236000:  # blue_score was reset 2021-11-22, so sample more often before checkpoint
                 next_blue_score = block.blue_score + 3600
             else:
