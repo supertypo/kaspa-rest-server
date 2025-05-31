@@ -182,6 +182,15 @@ if HASHRATE_HISTORY:
             _logger.exception(e)
             _logger.error("Hashrate history: update failed")
 
+    @app.on_event("startup")
+    @repeat_every(seconds=1800)
+    async def update_hashrate_history_scheduled():
+        try:
+            await update_hashrate_history()
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error("Hashrate history: update failed")
+
 
 async def create_hashrate_history_table():
     global _hashrate_table_exists
@@ -217,18 +226,6 @@ async def create_hashrate_history_table():
         except Exception as e:
             _logger.exception(e)
             _logger.error(f"Hashrate history: Failed to create table, create it manually: \n{create_table_sql}")
-
-
-if HASHRATE_HISTORY:
-
-    @app.on_event("startup")
-    @repeat_every(seconds=1800)
-    async def update_hashrate_history_scheduled():
-        try:
-            await update_hashrate_history()
-        except Exception as e:
-            _logger.exception(e)
-            _logger.error("Hashrate history: update failed")
 
 
 async def update_hashrate_history():
