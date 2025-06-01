@@ -202,7 +202,7 @@ async def create_hashrate_history_table():
             _hashrate_table_exists = result.scalar()
 
             if _hashrate_table_exists:
-                _logger.info("Hashrate history: Table already exists")
+                _logger.debug("Hashrate history: Table already exists")
                 return
 
             _logger.warn("Hashrate history table does not exist, attempting to create it")
