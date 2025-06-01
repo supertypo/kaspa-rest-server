@@ -4,6 +4,7 @@ import os
 
 from starlette.responses import RedirectResponse
 
+from constants import HASHRATE_HISTORY
 from endpoints import (
     get_balance,
     get_utxos,
@@ -19,7 +20,11 @@ from endpoints.get_address_transactions import get_addresses_active
 from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
-from endpoints.get_hashrate import get_hashrate
+from endpoints.get_hashrate import (
+    get_hashrate,
+    update_hashrate_history_scheduled,
+    create_hashrate_history_table_scheduled,
+)
 from endpoints.get_health import health_state
 from endpoints.get_marketcap import get_marketcap
 from endpoints.get_transaction_mass import calculate_transaction_mass
@@ -61,6 +66,10 @@ async def startup():
 
     # find kaspad before staring webserver
     await kaspad_client.initialize_all()
+
+    if HASHRATE_HISTORY:
+        await create_hashrate_history_table_scheduled()
+        await update_hashrate_history_scheduled()
 
 
 @app.get("/", include_in_schema=False)
