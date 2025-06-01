@@ -178,12 +178,17 @@ if HASHRATE_HISTORY:
 
     @app.on_event("startup")
     async def create_hashrate_history_table_scheduled():
-        await create_hashrate_history_table()
+        try:
+            await create_hashrate_history_table()
+        except Exception:
+            pass
 
-    @app.on_event("startup")
-    @repeat_every(seconds=1800)
+    @repeat_every(seconds=300, wait_first=False)
     async def update_hashrate_history_scheduled():
-        await update_hashrate_history()
+        try:
+            await update_hashrate_history()
+        except Exception:
+            pass
 
 
 async def create_hashrate_history_table():
@@ -291,7 +296,7 @@ async def acquire_hashrate_history_lock(s):
     try:
         result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
         if not result.scalar():
-            _logger.info("Hashrate history: waiting for advisory lock")
+            _logger.debug("Hashrate history: waiting for advisory lock")
             await s.execute(text("SELECT pg_advisory_lock(123100)"))
         _logger.debug("Hashrate history: Acquired advisory lock (123100)")
     except Exception as e:
