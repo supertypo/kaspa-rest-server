@@ -188,7 +188,7 @@ async def create_hashrate_history_table():
     global _hashrate_table_exists
 
     async with async_session_blocks() as s:
-        await aquire_hashrate_history_lock(s)
+        await acquire_hashrate_history_lock(s)
         try:
             check_table_exists_sql = text(f"""
                 SELECT EXISTS (
@@ -235,7 +235,7 @@ async def update_hashrate_history():
     sample_count = 0
     batch = []
     async with async_session_blocks() as s:
-        await aquire_hashrate_history_lock(s)
+        await acquire_hashrate_history_lock(s)
         try:
             result = await s.execute(select(func.max(HashrateHistory.blue_score)))
             max_blue_score = result.scalar_one_or_none() or 0
@@ -285,16 +285,16 @@ async def update_hashrate_history():
     _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
 
 
-async def aquire_hashrate_history_lock(s):
+async def acquire_hashrate_history_lock(s):
     try:
         result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
         if not result.scalar():
             _logger.info("Hashrate history: waiting for advisory lock")
             await s.execute(text("SELECT pg_advisory_lock(123100)"))
-        _logger.debug("Hashrate history: Aquired advisory lock (123100)")
+        _logger.debug("Hashrate history: Acquired advisory lock (123100)")
     except Exception as e:
         _logger.exception(e)
-        _logger.error("Hashrate history: unable to aquire advisory lock (123100)")
+        _logger.error("Hashrate history: unable to acquire advisory lock (123100)")
         raise e
 
 
