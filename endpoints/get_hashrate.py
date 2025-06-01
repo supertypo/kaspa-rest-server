@@ -2,7 +2,7 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Literal
+from typing import Optional
 
 from fastapi import HTTPException
 from fastapi.params import Query
@@ -139,15 +139,17 @@ _hashrate_history_updated = False
 
 
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
-async def get_hashrate_history(response: Response, limit: Optional[Literal[10]] = Query(default=None)):
+async def get_hashrate_history(response: Response, limit: Optional[int] = Query(default=None, enum=[10])):
     """
     Returns historical hashrate in KH/s with a resolution of ~3 hours between samples.
     Use no limit for initial fetch (updated daily), afterward use limit (updated hourly).
     """
     if not _hashrate_table_exists or not _hashrate_history_updated:
         raise HTTPException(status_code=503, detail="Hashrate history is not available")
-    if limit:
+    if limit == 10:
         response.headers["Cache-Control"] = "public, max-age=3600"
+    elif limit:
+        raise HTTPException(status_code=400, detail="Invalid limit")
     else:
         response.headers["Cache-Control"] = "public, max-age=86400"
 
