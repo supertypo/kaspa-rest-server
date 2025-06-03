@@ -25,35 +25,48 @@ class HashrateHistoryResponse(BaseModel):
     blueScore: int
     timestamp: int
     date_time: str
-    bits: int
+    bits: int | None
     difficulty: int
     hashrate_kh: int
 
 
 _hashrate_table_exists = False
 _hashrate_history_updated = False
+_sample_interval_hours = 3
+_crescendo_blue_score = 108554145
 
 
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
-async def get_hashrate_history(response: Response, limit: Optional[int] = Query(default=None, enum=[10])):
+async def get_hashrate_history(
+    response: Response, resolution: Optional[str] = Query(default="3h", enum=["3h", "1d", "7d"])
+):
     """
-    Returns historical hashrate in KH/s with a resolution of ~3 hours between samples.
+    BETA, EXPECT API CHANGES: Returns historical hashrate in kH/s.
     """
     if not _hashrate_table_exists or not _hashrate_history_updated:
         raise HTTPException(status_code=503, detail="Hashrate history is not available")
-    if limit == 10:
-        response.headers["Cache-Control"] = "public, max-age=600"
-    elif limit:
-        raise HTTPException(status_code=400, detail="Invalid limit")
-    else:
-        response.headers["Cache-Control"] = "public, max-age=3600"
+
+    response.headers["Cache-Control"] = "public, max-age=3600"
+
+    resolution_map = {
+        "3h": int(3 / _sample_interval_hours),
+        "1d": int(24 / _sample_interval_hours),
+        "7d": int(7 * 24 / _sample_interval_hours),
+    }
+    sample_interval = resolution_map.get(resolution)
+    if not sample_interval:
+        raise HTTPException(status_code=400, detail=f"Invalid resolution, allowed: {list(resolution_map.keys())}")
 
     async with async_session_blocks() as s:
-        stmt = select(HashrateHistory).order_by(HashrateHistory.daa_score.desc())
-        if limit:
-            stmt = stmt.limit(limit)
-        result = await s.execute(stmt)
-        return [
+        result = await s.execute(select(HashrateHistory).order_by(HashrateHistory.daa_score.desc()))
+        samples = result.scalars().all()
+
+        samples_filtered = []
+        for i in range(0, len(samples), sample_interval):
+            chunk = samples[i:i + sample_interval]
+            sample = chunk[-1]
+            difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
+            samples_filtered.append(
             {
                 "daaScore": sample.daa_score,
                 "blueScore": sample.blue_score,
@@ -61,12 +74,11 @@ async def get_hashrate_history(response: Response, limit: Optional[int] = Query(
                 "date_time": datetime.fromtimestamp(sample.timestamp / 1000, tz=timezone.utc).isoformat(
                     timespec="milliseconds"
                 ),
-                "bits": sample.bits,
-                "difficulty": (difficulty := bits_to_difficulty(sample.bits)),
-                "hashrate_kh": (difficulty * 2 * (1 if sample.blue_score < 108554145 else 10)) / 1_000,
-            }
-            for sample in result.scalars().all()
-        ]
+                "bits": sample.bits if sample_interval == 1 else None,
+                "difficulty": difficulty,
+                "hashrate_kh": difficulty * 2 * (1 if sample.blue_score < _crescendo_blue_score else 10) // 1_000,
+            })
+        return samples_filtered
 
 
 async def create_hashrate_history_table():
@@ -116,7 +128,6 @@ async def create_hashrate_history_table():
 @repeat_every(seconds=1800)
 async def update_hashrate_history():
     global _hashrate_history_updated
-    sample_interval_hours = 3
     batch_size = 1000
 
     if not _hashrate_table_exists:
@@ -131,10 +142,10 @@ async def update_hashrate_history():
         try:
             result = await s.execute(select(func.max(HashrateHistory.blue_score)))
             max_blue_score = result.scalar_one_or_none() or 0
-            bps = 1 if max_blue_score < 108554145 else 10  # Crescendo
+            bps = 1 if max_blue_score < _crescendo_blue_score else 10  # Crescendo
             next_blue_score = 0
             if max_blue_score > 0:
-                next_blue_score = max_blue_score + (bps * 3600 * sample_interval_hours)
+                next_blue_score = max_blue_score + (bps * 3600 * _sample_interval_hours)
 
             current_blue_score = await get_virtual_selected_parent_blue_score()
             while int(current_blue_score["blueScore"]) > next_blue_score:
@@ -175,8 +186,8 @@ async def update_hashrate_history():
                 if block.blue_score < 6550000:  # sample more in the period before complete dataset
                     next_blue_score = block.blue_score + 3600
                 else:
-                    bps = 1 if block.blue_score < 108554145 else 10
-                    next_blue_score = block.blue_score + (bps * 3600 * sample_interval_hours)
+                    bps = 1 if block.blue_score < _crescendo_blue_score else 10
+                    next_blue_score = block.blue_score + (bps * 3600 * _sample_interval_hours)
             if batch:
                 s.add_all(batch)
                 await s.commit()
