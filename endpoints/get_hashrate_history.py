@@ -78,8 +78,8 @@ async def get_hashrate_history(
                 samples_filtered.append(hashrate_history(last, None, difficulty, hashrate_kh))
             else:
                 difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
-                hashrate_kh = difficulty * 2 * (1 if first.blue_score < _crescendo_blue_score else 10) // 1_000
-                samples_filtered.append(hashrate_history(first, first.bits, difficulty, hashrate_kh))
+                hashrate_kh = difficulty * 2 * (1 if last.blue_score < _crescendo_blue_score else 10) // 1_000
+                samples_filtered.append(hashrate_history(last, last.bits, difficulty, hashrate_kh))
         return samples_filtered
 
 
