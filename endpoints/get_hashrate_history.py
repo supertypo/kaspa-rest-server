@@ -65,8 +65,8 @@ async def get_hashrate_history(
         samples_filtered = []
         for i in range(0, len(samples), sample_interval):
             chunk = samples[i : i + sample_interval]
-            first = chunk[0]
-            last = chunk[-1]
+            first = chunk[-1]
+            last = chunk[0]
             # If sampling and crossing the crescendo activation, we must create one sample before and one after
             # Otherwise there will be artifacts produced in the graph due to the sudden reduction in difficulty
             if first.blue_score < _crescendo_blue_score <= last.blue_score:
