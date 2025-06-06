@@ -65,22 +65,36 @@ async def get_hashrate_history(
         samples_filtered = []
         for i in range(0, len(samples), sample_interval):
             chunk = samples[i : i + sample_interval]
-            sample = chunk[-1]
-            difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
-            samples_filtered.append(
-                {
-                    "daaScore": sample.daa_score,
-                    "blueScore": sample.blue_score,
-                    "timestamp": sample.timestamp,
-                    "date_time": datetime.fromtimestamp(sample.timestamp / 1000, tz=timezone.utc).isoformat(
-                        timespec="milliseconds"
-                    ),
-                    "bits": sample.bits if sample_interval == 1 else None,
-                    "difficulty": difficulty,
-                    "hashrate_kh": difficulty * 2 * (1 if sample.blue_score < _crescendo_blue_score else 10) // 1_000,
-                }
-            )
+            first = chunk[0]
+            last = chunk[-1]
+            # If sampling and crossing the crescendo activation, we must create one sample before and one after
+            # Otherwise there will be artifacts produced in the graph due to the sudden reduction in difficulty
+            if first.blue_score < _crescendo_blue_score <= last.blue_score:
+                difficulty = int(bits_to_difficulty(first.bits))
+                hashrate_kh = difficulty * 2 // 1_000
+                samples_filtered.append(hashrate_history(first, None, difficulty, hashrate_kh))
+                difficulty = int(bits_to_difficulty(last.bits))
+                hashrate_kh = difficulty * 2 * 10 // 1_000
+                samples_filtered.append(hashrate_history(last, None, difficulty, hashrate_kh))
+            else:
+                difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
+                hashrate_kh = difficulty * 2 * (1 if first.blue_score < _crescendo_blue_score else 10) // 1_000
+                samples_filtered.append(hashrate_history(first, first.bits, difficulty, hashrate_kh))
         return samples_filtered
+
+
+def hashrate_history(sample, bits, difficulty, hashrate_kh):
+    return {
+        "daaScore": sample.daa_score,
+        "blueScore": sample.blue_score,
+        "timestamp": sample.timestamp,
+        "date_time": datetime.fromtimestamp(sample.timestamp / 1000, tz=timezone.utc).isoformat(
+            timespec="milliseconds"
+        ),
+        "bits": bits,
+        "difficulty": difficulty,
+        "hashrate_kh": hashrate_kh,
+    }
 
 
 async def create_hashrate_history_table():
