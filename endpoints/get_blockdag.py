@@ -40,7 +40,7 @@ async def get_blockdag():
     rpc_client = await kaspad_rpc_client()
     if rpc_client:
         info = await wait_for(rpc_client.get_block_dag_info(), 10)
-        info["networkName"] = f"kaspa-{info["network"]}"
+        info["networkName"] = f"kaspa-{info['network']}"
         return info
     else:
         resp = await kaspad_client.request("getBlockDagInfoRequest")
