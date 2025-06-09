@@ -23,7 +23,8 @@ async def kaspad_rpc_client() -> RpcClient:
             try:
                 await wait_for(kaspad_rpc_client.client.connect(), 10 if use_resolver else 5)
                 if kaspad_rpc_client.client.is_connected:
-                    logging.info(f"Successfully connected to Kaspad ({KASPAD_WRPC_URL})")
+                    info = await wait_for(kaspad_rpc_client.client.get_block_dag_info(), 10)
+                    logging.info(f"Successfully connected to Kaspad {info["network"]} ({KASPAD_WRPC_URL})")
             except Exception:
                 pass
             if not kaspad_rpc_client.client.is_connected:
