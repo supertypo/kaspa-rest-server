@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, text, func
 from starlette.responses import Response
 
+from constants import HASHRATE_HISTORY
 from dbsession import async_session_blocks
 from endpoints.get_virtual_chain_blue_score import get_virtual_selected_parent_blue_score
 from helper.difficulty_calculation import bits_to_difficulty
@@ -43,8 +44,8 @@ async def get_hashrate_history(
     """
     Get historical hashrate samples with optional resolution (default = 1h)
     """
-    if not _hashrate_table_exists or not _hashrate_history_updated:
-        raise HTTPException(status_code=503, detail="Hashrate history is not available")
+    if not HASHRATE_HISTORY:
+        raise HTTPException(status_code=503, detail="Hashrate history is disabled")
 
     response.headers["Cache-Control"] = "public, max-age=3600"
 
@@ -102,6 +103,10 @@ def hashrate_history(sample, bits, difficulty, hashrate_kh):
 async def create_hashrate_history_table():
     global _hashrate_table_exists
 
+    if not HASHRATE_HISTORY:
+        _logger.debug("Hashrate history: Disabled. Skipping table creation")
+        return
+
     async with async_session_blocks() as s:
         await acquire_hashrate_history_lock(s)
         try:
@@ -148,8 +153,8 @@ async def update_hashrate_history():
     global _hashrate_history_updated
     batch_size = 1000
 
-    if not _hashrate_table_exists:
-        _logger.warning(f"Hashrate history: Skipping sampling as table '{HashrateHistory.__tablename__}' doesn't exist")
+    if not HASHRATE_HISTORY:
+        _logger.debug("Hashrate history: Disabled. Skipping update")
         return
 
     _logger.info("Hashrate history: Sampling hashrate history")

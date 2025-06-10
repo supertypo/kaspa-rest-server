@@ -70,12 +70,11 @@ async def startup():
     # find kaspad before staring webserver
     await kaspad_client.initialize_all()
 
-    if HASHRATE_HISTORY:
-        try:
-            await create_hashrate_history_table()
-            await update_hashrate_history()
-        except Exception:
-            pass
+    try:
+        await create_hashrate_history_table()
+        await update_hashrate_history()
+    except Exception:
+        pass
 
 
 @app.get("/", include_in_schema=False)
