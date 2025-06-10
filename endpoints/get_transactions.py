@@ -147,7 +147,8 @@ async def get_transaction(
                 transaction = await get_transaction_from_kaspad(block_hashes, transactionId, inputs, outputs)
                 if transaction and inputs and res_outpoints == "light" and PREV_OUT_RESOLVED:
                     tx_inputs = await get_tx_inputs_from_db(None, res_outpoints, [transactionId])
-                    transaction["inputs"] = tx_inputs.get(transactionId) or None
+                    if transactionId in tx_inputs:
+                        transaction["inputs"] = tx_inputs[transactionId]
 
             if not transaction:
                 tx = await session.execute(
@@ -180,7 +181,8 @@ async def get_transaction(
             if transaction:
                 if inputs and res_outpoints == "light" and not PREV_OUT_RESOLVED or res_outpoints == "full":
                     tx_inputs = await get_tx_inputs_from_db(None, res_outpoints, [transactionId])
-                    transaction["inputs"] = tx_inputs.get(transactionId) or None
+                    if transactionId in tx_inputs:
+                        transaction["inputs"] = tx_inputs[transactionId]
 
                 accepted_transaction_id, accepting_block_hash = (
                     await session.execute(
