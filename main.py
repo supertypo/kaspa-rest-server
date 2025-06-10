@@ -4,7 +4,6 @@ import os
 
 from starlette.responses import RedirectResponse
 
-from constants import HASHRATE_HISTORY
 from endpoints import (
     get_balance,
     get_utxos,
