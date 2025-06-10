@@ -11,7 +11,6 @@ from endpoints import (
     get_blockdag,
     get_circulating_supply,
     get_kaspad_info,
-    get_network,
     get_fee_estimate,
     get_price,
 )
@@ -32,13 +31,14 @@ from endpoints.kaspad_requests.submit_transaction_request import (
     submit_a_new_transaction,
 )
 from helper import get_kas_market_data
+from kaspad.KaspadRpcClient import kaspad_rpc_client
 from server import app, kaspad_client
 
 IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 print(
     f"Loaded: {get_balance}, {get_utxos}, {get_blocks}, {get_blockdag}, {get_circulating_supply}, "
-    f"{get_kaspad_info}, {get_network}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward}"
+    f"{get_kaspad_info}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward}"
     f"{get_halving} {health_state} {get_transaction} {get_virtual_chain_transactions}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active}"
     f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
@@ -61,6 +61,7 @@ async def startup():
 
     # find kaspad before staring webserver
     await kaspad_client.initialize_all()
+    await kaspad_rpc_client()
 
 
 @app.get("/", include_in_schema=False)
