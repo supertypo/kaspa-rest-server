@@ -38,10 +38,10 @@ _crescendo_blue_score = 108554145
 
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
 async def get_hashrate_history(
-    response: Response, resolution: Optional[str] = Query(default=None, enum=["3h", "1d", "7d"])
+    response: Response, resolution: Optional[str] = Query(default=None, enum=["1h", "3h", "1d", "7d"])
 ):
     """
-    BETA, EXPECT API CHANGES: Returns historical hashrate in kH/s.
+    Get historical hashrate samples with optional resolution (default = 1h)
     """
     if not _hashrate_table_exists or not _hashrate_history_updated:
         raise HTTPException(status_code=503, detail="Hashrate history is not available")
@@ -50,6 +50,7 @@ async def get_hashrate_history(
 
     resolution_map = {
         None: int(1 / _sample_interval_hours),
+        "1h": int(1 / _sample_interval_hours),
         "3h": int(3 / _sample_interval_hours),
         "1d": int(24 / _sample_interval_hours),
         "7d": int(7 * 24 / _sample_interval_hours),
@@ -77,9 +78,10 @@ async def get_hashrate_history(
                 hashrate_kh = difficulty * 2 * 10 // 1_000
                 samples_filtered.append(hashrate_history(last, None, difficulty, hashrate_kh))
             else:
+                bits = last.bits if sample_interval == _sample_interval_hours else None
                 difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
                 hashrate_kh = difficulty * 2 * (1 if last.blue_score < _crescendo_blue_score else 10) // 1_000
-                samples_filtered.append(hashrate_history(last, last.bits, difficulty, hashrate_kh))
+                samples_filtered.append(hashrate_history(last, bits, difficulty, hashrate_kh))
         return samples_filtered
 
 
