@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import Path, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import exists
 from sqlalchemy.future import select
 from starlette.responses import Response
@@ -90,16 +90,19 @@ class TxSearch(BaseModel):
 
 
 class TxAcceptanceRequest(BaseModel):
-    transactionIds: list[str] = [
-        "b9382bdee4aa364acf73eda93914eaae61d0e78334d1b8a637ab89ef5e224e41",
-        "1e098b3830c994beb28768f7924a38286cec16e85e9757e0dc3574b85f624c34",
-        "6dd5ee1add449c60d2c2b9545a8dfca7cfbc9a29ce2d3f3ec8bbde14dd97610d",
-    ]
+    transactionIds: list[str] = Field(
+        example=[
+            "b9382bdee4aa364acf73eda93914eaae61d0e78334d1b8a637ab89ef5e224e41",
+            "1e098b3830c994beb28768f7924a38286cec16e85e9757e0dc3574b85f624c34",
+            "000ad5138a603aadc25cfcca6b6605d5ff47d8c7be594c9cdd199afa6dc76ac6",
+        ]
+    )
 
 
 class TxAcceptanceResponse(BaseModel):
     transactionId: str = "b9382bdee4aa364acf73eda93914eaae61d0e78334d1b8a637ab89ef5e224e41"
     accepted: bool
+    acceptingBlueScore: int | None
 
 
 class PreviousOutpointLookupMode(str, Enum):
@@ -372,7 +375,7 @@ async def search_for_transactions(
 @sql_db_only
 async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest):
     """
-    Given a list of transaction_ids, return whether each one is accepted
+    Given a list of transaction_ids, return whether each one is accepted and the accepting blue score.
     """
     transaction_ids = tx_acceptance_request.transactionIds
     if len(transaction_ids) > TX_SEARCH_ID_LIMIT:
@@ -380,14 +383,24 @@ async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest)
 
     async with async_session() as s:
         result = await s.execute(
-            select(TransactionAcceptance.transaction_id).where(
-                TransactionAcceptance.transaction_id.in_(set(transaction_ids))  # Dedup
+            select(TransactionAcceptance.transaction_id, TransactionAcceptance.block_hash).where(
+                TransactionAcceptance.transaction_id.in_(set(transaction_ids))
             )
         )
-        transactions_ids_accepted = set(result.scalars().all())
+        transaction_id_to_block_hash = {tx_id: block_hash for tx_id, block_hash in result}
+
+    async with async_session_blocks() as s:
+        result = await s.execute(
+            select(Block.hash, Block.blue_score).where(Block.hash.in_(set(transaction_id_to_block_hash.values())))
+        )
+        block_hash_to_blue_score = {block_hash: blue_score for block_hash, blue_score in result}
 
     return [
-        TxAcceptanceResponse(transactionId=transaction_id, accepted=(transaction_id in transactions_ids_accepted))
+        TxAcceptanceResponse(
+            transactionId=transaction_id,
+            accepted=(transaction_id in transaction_id_to_block_hash),
+            acceptingBlueScore=block_hash_to_blue_score.get(transaction_id_to_block_hash.get(transaction_id)),
+        )
         for transaction_id in transaction_ids
     ]
 
