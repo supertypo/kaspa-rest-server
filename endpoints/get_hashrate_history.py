@@ -31,15 +31,13 @@ class HashrateHistoryResponse(BaseModel):
     hashrate_kh: int
 
 
-_hashrate_table_exists = False
-_hashrate_history_updated = False
-_sample_interval_hours = 1
+_sample_interval_minutes = 15
 _crescendo_blue_score = 108554145
 
 
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
 async def get_hashrate_history(
-    response: Response, resolution: Optional[str] = Query(default=None, enum=["1h", "3h", "1d", "7d"])
+    response: Response, resolution: Optional[str] = Query(default=None, enum=["15m", "1h", "3h", "1d", "7d"])
 ):
     """
     Get historical hashrate samples with optional resolution (default = 1h)
@@ -47,14 +45,15 @@ async def get_hashrate_history(
     if not HASHRATE_HISTORY:
         raise HTTPException(status_code=503, detail="Hashrate history is disabled")
 
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "public, max-age=600"
 
     resolution_map = {
-        None: int(1 / _sample_interval_hours),
-        "1h": int(1 / _sample_interval_hours),
-        "3h": int(3 / _sample_interval_hours),
-        "1d": int(24 / _sample_interval_hours),
-        "7d": int(7 * 24 / _sample_interval_hours),
+        None: int(60 / _sample_interval_minutes),
+        "15m": int(15 / _sample_interval_minutes),
+        "1h": int(60 / _sample_interval_minutes),
+        "3h": int(3 * 60 / _sample_interval_minutes),
+        "1d": int(24 * 60 / _sample_interval_minutes),
+        "7d": int(7 * 24 * 60 / _sample_interval_minutes),
     }
     sample_interval = resolution_map.get(resolution)
     if not sample_interval:
@@ -79,7 +78,7 @@ async def get_hashrate_history(
                 hashrate_kh = difficulty * 2 * 10 // 1_000
                 samples_filtered.append(hashrate_history(last, None, difficulty, hashrate_kh))
             else:
-                bits = last.bits if sample_interval == _sample_interval_hours else None
+                bits = last.bits if sample_interval == 1 else None
                 difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
                 hashrate_kh = difficulty * 2 * (1 if last.blue_score < _crescendo_blue_score else 10) // 1_000
                 samples_filtered.append(hashrate_history(last, bits, difficulty, hashrate_kh))
@@ -101,8 +100,6 @@ def hashrate_history(sample, bits, difficulty, hashrate_kh):
 
 
 async def create_hashrate_history_table():
-    global _hashrate_table_exists
-
     if not HASHRATE_HISTORY:
         _logger.debug("Hashrate history: Disabled. Skipping table creation")
         return
@@ -117,9 +114,7 @@ async def create_hashrate_history_table():
                 );
             """)
             result = await s.execute(check_table_exists_sql)
-            _hashrate_table_exists = result.scalar()
-
-            if _hashrate_table_exists:
+            if result.scalar():
                 _logger.debug("Hashrate history: Table already exists")
                 return
 
@@ -138,7 +133,6 @@ async def create_hashrate_history_table():
             """
             await s.execute(text(create_index_sql))
             await s.commit()
-            _hashrate_table_exists = True
         except Exception as e:
             _logger.exception(e)
             _logger.error(
@@ -148,9 +142,8 @@ async def create_hashrate_history_table():
             await release_hashrate_history_lock(s)
 
 
-@repeat_every(seconds=1800)
+@repeat_every(seconds=600)
 async def update_hashrate_history():
-    global _hashrate_history_updated
     batch_size = 1000
 
     if not HASHRATE_HISTORY:
@@ -168,7 +161,7 @@ async def update_hashrate_history():
             bps = 1 if max_blue_score < _crescendo_blue_score else 10  # Crescendo
             next_blue_score = 0
             if max_blue_score > 0:
-                next_blue_score = max_blue_score + (bps * 3600 * _sample_interval_hours)
+                next_blue_score = max_blue_score + (bps * 60 * _sample_interval_minutes)
 
             current_blue_score = await get_virtual_selected_parent_blue_score()
             while int(current_blue_score["blueScore"]) > next_blue_score:
@@ -207,7 +200,7 @@ async def update_hashrate_history():
                         )
                 block = blocks[0]
                 bps = 1 if block.blue_score < _crescendo_blue_score else 10
-                next_blue_score = block.blue_score + (bps * 3600 * _sample_interval_hours)
+                next_blue_score = block.blue_score + (bps * 60 * _sample_interval_minutes)
             if batch:
                 s.add_all(batch)
                 await s.commit()
@@ -216,7 +209,6 @@ async def update_hashrate_history():
             _logger.error("Hashrate history: Sampling failed")
         finally:
             await release_hashrate_history_lock(s)
-    _hashrate_history_updated = True
     _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
 
 
