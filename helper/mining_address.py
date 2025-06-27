@@ -10,12 +10,13 @@ def get_miner_payload_from_block(block: dict):
         if tx["subnetworkId"] == "0100000000000000000000000000000000000000":
             return tx["payload"]
 
-    raise LookupError("Could not find miner payload.")
-
 
 def retrieve_miner_info_from_payload(payload: str):
-    parsed_payload = parse_payload(payload)
-    return parsed_payload[1], parsed_payload[0]
+    try:
+        parsed_payload = parse_payload(payload)
+        return parsed_payload[1], parsed_payload[0]
+    except Exception:
+        return None, None
 
 
 def parse_payload(payload: str):
