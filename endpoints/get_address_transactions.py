@@ -2,17 +2,15 @@
 import time
 from typing import List, Optional
 
-from kaspa_script_address import to_script, to_address
-
-from constants import USE_SCRIPT_FOR_ADDRESS, TX_COUNT_LIMIT, ADDRESS_PREFIX
-
 from fastapi import Path, Query, HTTPException
+from kaspa_script_address import to_script
 from pydantic import BaseModel
-from sqlalchemy import func, or_, values, column, exists
+from sqlalchemy import func, or_
 from sqlalchemy.future import select
 from starlette.responses import Response
 
 from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS
+from constants import USE_SCRIPT_FOR_ADDRESS, TX_COUNT_LIMIT
 from dbsession import async_session
 from endpoints import sql_db_only
 from endpoints.get_transactions import (
@@ -31,15 +29,6 @@ DESC_RESOLVE_PARAM = (
     " Light fetches only the adress and amount. Full fetches the whole TransactionOutput and "
     "adds it into each TxInput."
 )
-
-
-class AddressesActiveRequest(BaseModel):
-    addresses: list[str] = [ADDRESS_EXAMPLE]
-
-
-class TxIdResponse(BaseModel):
-    address: str
-    active: bool
 
 
 class TransactionsReceivedAndSpent(BaseModel):
@@ -67,7 +56,9 @@ class TransactionCount(BaseModel):
 @sql_db_only
 async def get_full_transactions_for_address(
     response: Response,
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    kaspa_address: str = Path(
+        alias="kaspaAddress", description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
     limit: int = Query(description="The number of records to get", ge=1, le=500, default=50),
     offset: int = Query(description="The offset from which to get records", ge=0, default=0),
     fields: str = "",
@@ -78,9 +69,9 @@ async def get_full_transactions_for_address(
     And then get their related full transaction data
     """
     try:
-        script = to_script(kaspaAddress)
+        script = to_script(kaspa_address)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspa_address}")
 
     async with async_session() as s:
         if USE_SCRIPT_FOR_ADDRESS:
@@ -94,7 +85,7 @@ async def get_full_transactions_for_address(
         else:
             tx_within_limit_offset = await s.execute(
                 select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
-                .filter(TxAddrMapping.address == kaspaAddress)
+                .filter(TxAddrMapping.address == kaspa_address)
                 .limit(limit)
                 .offset(offset)
                 .order_by(TxAddrMapping.block_time.desc())
@@ -119,52 +110,9 @@ async def get_full_transactions_for_address(
         ttl = 8
     response.headers["Cache-Control"] = f"public, max-age={ttl}"
 
-    return await search_for_transactions(TxSearch(transactionIds=tx_ids_in_page), fields, resolve_previous_outpoints)
-
-
-@app.post(
-    "/addresses/active",
-    response_model=List[TxIdResponse],
-    response_model_exclude_unset=True,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_addresses_active(addresses_active_request: AddressesActiveRequest):
-    """
-    This endpoint checks if addresses have had any transaction activity in the past.
-    It is specifically designed for HD Wallets to verify historical address activity.
-    """
-    async with async_session() as s:
-        addresses = set(addresses_active_request.addresses)
-        script_addresses = set()
-        for address in addresses:
-            try:
-                script_addresses.add(to_script(address))
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid address: {address}")
-
-        if USE_SCRIPT_FOR_ADDRESS:
-            v = values(column("script_public_key", TxScriptMapping.__table__.c.script_public_key.type), name="v").data(
-                [(addr,) for addr in script_addresses]
-            )
-            result = await s.execute(
-                select(v.c.script_public_key).where(
-                    exists().where(TxScriptMapping.script_public_key == v.c.script_public_key)
-                )
-            )
-            addresses_used = set(to_address(ADDRESS_PREFIX, s) for s in result.scalars().all())
-        else:
-            v = values(column("address", TxAddrMapping.__table__.c.address.type), name="v").data(
-                [(addr,) for addr in addresses]
-            )
-            result = await s.execute(select(v.c.address).where(exists().where(TxAddrMapping.address == v.c.address)))
-            addresses_used = set(result.scalars().all())
-
-    return [
-        TxIdResponse(address=address, active=(address in addresses_used))
-        for address in addresses_active_request.addresses
-    ]
+    return await search_for_transactions(
+        TxSearch(transactionIds=tx_ids_in_page, acceptingBlueScores=None), fields, resolve_previous_outpoints
+    )
 
 
 @app.get(
@@ -177,7 +125,9 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
 @sql_db_only
 async def get_full_transactions_for_address_page(
     response: Response,
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    kaspa_address: str = Path(
+        alias="kaspaAddress", description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
     limit: int = Query(
         description="The max number of records to get. "
         "For paging combine with using 'before/after' from oldest previous result. "
@@ -202,9 +152,9 @@ async def get_full_transactions_for_address_page(
     And then get their related full transaction data
     """
     try:
-        script = to_script(kaspaAddress)
+        script = to_script(kaspa_address)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspa_address}")
 
     if USE_SCRIPT_FOR_ADDRESS:
         query = (
@@ -215,7 +165,7 @@ async def get_full_transactions_for_address_page(
     else:
         query = (
             select(TxAddrMapping.transaction_id, TxAddrMapping.block_time)
-            .filter(TxAddrMapping.address == kaspaAddress)
+            .filter(TxAddrMapping.address == kaspa_address)
             .limit(limit)
         )
 
@@ -269,7 +219,7 @@ async def get_full_transactions_for_address_page(
             else:
                 tx_with_same_block_time = await s.execute(
                     select(TxAddrMapping.transaction_id)
-                    .filter(TxAddrMapping.address == kaspaAddress)
+                    .filter(TxAddrMapping.address == kaspa_address)
                     .filter(
                         or_(
                             TxAddrMapping.block_time == newest_block_time, TxAddrMapping.block_time == oldest_block_time
@@ -284,7 +234,7 @@ async def get_full_transactions_for_address_page(
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
 
     res = await search_for_transactions(
-        TxSearch(transactionIds=list(tx_ids)), fields, resolve_previous_outpoints, acceptance
+        TxSearch(transactionIds=list(tx_ids), acceptingBlueScores=None), fields, resolve_previous_outpoints, acceptance
     )
     if before:
         add_cache_control(None, before, response)
@@ -303,22 +253,24 @@ async def get_full_transactions_for_address_page(
 @sql_db_only
 async def get_transaction_count_for_address(
     response: Response,
-    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+    kaspa_address: str = Path(
+        alias="kaspaAddress", description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
+    ),
 ):
     """
     Count the number of transactions associated with this address
     """
     try:
-        script = to_script(kaspaAddress)
+        script = to_script(kaspa_address)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspa_address}")
 
     async with async_session() as s:
         if not TX_COUNT_LIMIT:
             if USE_SCRIPT_FOR_ADDRESS:
                 result = await s.execute(select(func.count()).filter(TxScriptMapping.script_public_key == script))
             else:
-                result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspaAddress))
+                result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspa_address))
         else:
             if USE_SCRIPT_FOR_ADDRESS:
                 result = await s.execute(
@@ -332,7 +284,7 @@ async def get_transaction_count_for_address(
             else:
                 result = await s.execute(
                     select(func.count()).select_from(
-                        select(1).filter(TxAddrMapping.address == kaspaAddress).limit(TX_COUNT_LIMIT + 1).subquery()
+                        select(1).filter(TxAddrMapping.address == kaspa_address).limit(TX_COUNT_LIMIT + 1).subquery()
                     )
                 )
         tx_count = result.scalar()

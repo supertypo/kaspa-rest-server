@@ -14,8 +14,9 @@ from endpoints import (
     get_fee_estimate,
     get_price,
 )
+from endpoints.get_address_active import get_addresses_active
 from endpoints.get_address_names import get_addresses_names
-from endpoints.get_address_transactions import get_addresses_active
+from endpoints.get_address_transactions import get_full_transactions_for_address_page
 from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
@@ -39,8 +40,8 @@ IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 print(
     f"Loaded: {get_balance}, {get_utxos}, {get_blocks}, {get_blockdag}, {get_circulating_supply}, "
-    f"{get_kaspad_info}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward}"
-    f"{get_halving} {health_state} {get_transaction} {get_virtual_chain_transactions}"
+    f"{get_kaspad_info}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward} {get_halving}"
+    f"{health_state} {get_transaction} {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names}"
     f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
 )
