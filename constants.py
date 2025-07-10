@@ -10,6 +10,8 @@ TX_SEARCH_ID_LIMIT = int(os.getenv("TX_SEARCH_ID_LIMIT", "1_000"))
 TX_SEARCH_BS_LIMIT = int(os.getenv("TX_SEARCH_BS_LIMIT", "100"))
 HEALTH_TOLERANCE_DOWN = int(os.getenv("HEALTH_TOLERANCE_DOWN", "300"))
 
+TOP_ADDRESSES = os.getenv("TOP_ADDRESSES", "false").lower() == "true"
+
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = int(os.getenv("BPS", "10"))
 
