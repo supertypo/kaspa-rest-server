@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import TOP_ADDRESSES
+from constants import ADDRESS_RANKINGS
 from dbsession import async_session_blocks
 from endpoints import sql_db_only
 from models.TopScript import TopScript
@@ -32,7 +32,7 @@ class TopAddress(BaseModel):
 )
 @sql_db_only
 async def get_addresses_top(response: Response, before: int | None = Query(None)):
-    if not TOP_ADDRESSES:
+    if not ADDRESS_RANKINGS:
         raise HTTPException(status_code=503, detail="Top addresses is disabled")
 
     response.headers["Cache-Control"] = "public, max-age=60"
