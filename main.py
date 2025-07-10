@@ -14,6 +14,7 @@ from endpoints import (
     get_fee_estimate,
     get_price,
 )
+from endpoints.get_address_names import get_addresses_names
 from endpoints.get_address_transactions import get_addresses_active
 from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
@@ -40,7 +41,7 @@ print(
     f"Loaded: {get_balance}, {get_utxos}, {get_blocks}, {get_blockdag}, {get_circulating_supply}, "
     f"{get_kaspad_info}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward}"
     f"{get_halving} {health_state} {get_transaction} {get_virtual_chain_transactions}"
-    f"{get_virtual_selected_parent_blue_score} {get_addresses_active}"
+    f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names}"
     f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
 )
 

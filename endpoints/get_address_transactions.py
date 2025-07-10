@@ -23,7 +23,6 @@ from endpoints.get_transactions import (
     AcceptanceMode,
 )
 from helper.utils import add_cache_control
-from models.AddressKnown import AddressKnown
 from models.TxAddrMapping import TxAddrMapping, TxScriptMapping
 from server import app
 
@@ -56,11 +55,6 @@ class TransactionForAddressResponse(BaseModel):
 class TransactionCount(BaseModel):
     total: int
     limit_exceeded: bool
-
-
-class AddressName(BaseModel):
-    address: str
-    name: str
 
 
 @app.get(
@@ -361,54 +355,3 @@ async def get_transaction_count_for_address(
 
     response.headers["Cache-Control"] = f"public, max-age={ttl}"
     return TransactionCount(total=tx_count, limit_exceeded=limit_exceeded)
-
-
-@app.get(
-    "/addresses/names",
-    response_model=List[AddressName],
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_addresses_names(response: Response):
-    """
-    Get the name for an address
-    """
-    response.headers["Cache-Control"] = "public, max-age=60"
-    async with async_session() as s:
-        rows = (await s.execute(select(AddressKnown))).scalars().all()
-        return [{"name": r.name, "address": r.address} for r in rows]
-
-
-@app.get(
-    "/addresses/{kaspaAddress}/name",
-    response_model=AddressName | None,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_name_for_address(
-    response: Response,
-    kaspaAddress: str = Path(
-        description="Kaspa address as string e.g. kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
-        regex=REGEX_KASPA_ADDRESS,
-    ),
-):
-    """
-    Get the name for an address
-    """
-    try:
-        to_script(kaspaAddress)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
-
-    async with async_session() as s:
-        r = (await s.execute(select(AddressKnown).filter(AddressKnown.address == kaspaAddress))).first()
-
-    response.headers["Cache-Control"] = "public, max-age=600"
-    if r:
-        return AddressName(address=r.AddressKnown.address, name=r.AddressKnown.name)
-    else:
-        raise HTTPException(
-            status_code=404, detail="Address name not found", headers={"Cache-Control": "public, max-age=600"}
-        )
