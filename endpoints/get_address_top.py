@@ -1,6 +1,6 @@
 # encoding: utf-8
 import time
-from typing import List
+from typing import List, Literal
 
 from fastapi import Query, HTTPException
 from pydantic import BaseModel
@@ -34,11 +34,11 @@ class TopAddresses(BaseModel):
     openapi_extra={"strict_query_params": True},
 )
 @sql_db_only
-async def get_addresses_top(
-    response: Response, before: int | None = Query(None), limit: int = Query(default=1, enum=[1])
-):
+async def get_addresses_top(response: Response, before: int | None = Query(None), limit: Literal[1] = Query(1)):
     if not ADDRESS_RANKINGS:
         raise HTTPException(status_code=503, detail="Top addresses is disabled")
+    if limit not in [1]:
+        raise HTTPException(400, "'limit' must be in [1]")
 
     response.headers["Cache-Control"] = "public, max-age=60"
     if before is not None:
