@@ -34,7 +34,7 @@ class TopAddresses(BaseModel):
     openapi_extra={"strict_query_params": True},
 )
 @sql_db_only
-async def get_addresses_top(response: Response, before: int | None = Query(None), limit: Literal[1] = Query(1)):
+async def get_addresses_top(response: Response, before: int | None = Query(None), limit: int = Query(default=1, enum=[1])):
     if not ADDRESS_RANKINGS:
         raise HTTPException(status_code=503, detail="Top addresses is disabled")
     if limit not in [1]:
