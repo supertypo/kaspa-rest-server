@@ -27,10 +27,12 @@ _logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Kaspa REST-API server",
-    description="This server is to communicate with kaspa network via REST-API",
-    version=os.getenv("VERSION") or "tbd",
-    contact={"name": "lAmeR1"},
+    description="REST-API server supporting block, tx and address search, using Kaspad and the indexer db.\n\n"
+    "[https://github.com/kaspa-ng/kaspa-rest-server](https://github.com/kaspa-ng/kaspa-rest-server)",
+    version=os.getenv("VERSION") or "dev",
+    contact={"name": "lAmeR1 / supertypo"},
     license_info={"name": "MIT LICENSE"},
+    swagger_ui_parameters={"tryItOutEnabled": True},
 )
 app.router.route_class = StrictRoute
 
