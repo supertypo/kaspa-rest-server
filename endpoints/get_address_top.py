@@ -22,7 +22,7 @@ class TopAddress(BaseModel):
 
 class TopAddresses(BaseModel):
     timestamp: int
-    ranks: List[TopAddress]
+    ranking: List[TopAddress]
 
 
 @app.get(
@@ -30,7 +30,7 @@ class TopAddresses(BaseModel):
     response_model=List[TopAddresses],
     tags=["Kaspa addresses"],
     summary="EXPERIMENTAL - EXPECT BREAKING CHANGES: Get top Kaspa addresses (rich list)",
-    description="Get top addresses, use 'before' to get historical data (must be aligned to limit).",
+    description="Get top addresses, use 'before' to get historical data (must be divisible by limit).",
     openapi_extra={"strict_query_params": True},
 )
 @sql_db_only
@@ -73,7 +73,9 @@ async def get_addresses_top(
     return [
         TopAddresses(
             timestamp=ts,
-            ranks=[TopAddress(rank=t.rank, address=t.script_public_key_address, amount=t.amount) for t in grouped[ts]],
+            ranking=[
+                TopAddress(rank=t.rank, address=t.script_public_key_address, amount=t.amount) for t in grouped[ts]
+            ],
         )
         for ts in sorted(grouped.keys(), reverse=True)
     ]
