@@ -40,6 +40,8 @@ async def get_distribution_tiers(
 ):
     if not ADDRESS_RANKINGS:
         raise HTTPException(status_code=503, detail="Distribution tiers is disabled")
+    if limit not in [1, 24]:
+        raise HTTPException(400, "'limit' must be in [1, 24]")
 
     response.headers["Cache-Control"] = "public, max-age=180"
     if before is not None:
