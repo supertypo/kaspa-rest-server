@@ -30,7 +30,7 @@ class DistributionTiers(BaseModel):
     response_model=List[DistributionTiers],
     tags=["Kaspa addresses"],
     summary="EXPERIMENTAL - EXPECT BREAKING CHANGES: Get Kaspa address distribution by balance tier",
-    description="Get address distribution tiers, use 'before' to get historical data (must be aligned to limit).\n\n"
+    description="Get address distribution tiers, use 'before' to get historical data (must be divisible by limit).\n\n"
     "Addresses are grouped by their balance (KAS) in powers of ten. Tier 0:[0.0001..1), 1:[1..10), ..., 10:[1b..10b).",
     openapi_extra={"strict_query_params": True},
 )
