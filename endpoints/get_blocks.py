@@ -156,6 +156,7 @@ async def get_block(
         miner_payload = get_miner_payload_from_block(block)
         if miner_payload:
             miner_info, miner_address = retrieve_miner_info_from_payload(miner_payload)
+            block.setdefault("extra", {})
             block["extra"]["minerInfo"] = miner_info
             block["extra"]["minerAddress"] = miner_address
         if not includeTransactions:
