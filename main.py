@@ -22,7 +22,14 @@ from endpoints.get_address_transactions import get_full_transactions_for_address
 from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
-from endpoints.get_hashrate import get_hashrate
+from endpoints.get_hashrate import (
+    get_hashrate,
+)
+from endpoints.get_hashrate_history import (
+    update_hashrate_history,
+    create_hashrate_history_table,
+    get_hashrate_history,
+)
 from endpoints.get_health import health_state
 from endpoints.get_marketcap import get_marketcap
 from endpoints.get_transaction_mass import calculate_transaction_mass
@@ -41,8 +48,8 @@ from server import app, kaspad_client
 IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 print(
-    f"Loaded: {get_balance}, {get_utxos}, {get_blocks}, {get_blockdag}, {get_circulating_supply}, {get_distribution_tiers}"
-    f"{get_kaspad_info}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_blockreward} {get_halving}"
+    f"Loaded: {get_balance} {get_utxos} {get_blocks} {get_blockdag} {get_circulating_supply} {get_distribution_tiers}"
+    f"{get_kaspad_info} {get_fee_estimate} {get_marketcap} {get_hashrate} {get_blockreward} {get_halving} {get_hashrate_history}"
     f"{health_state} {get_transaction} {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names} {get_addresses_top}"
     f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
@@ -66,6 +73,12 @@ async def startup():
     # find kaspad before staring webserver
     await kaspad_client.initialize_all()
     await kaspad_rpc_client()
+
+    try:
+        await create_hashrate_history_table()
+        await update_hashrate_history()
+    except Exception:
+        pass
 
 
 @app.get("/", include_in_schema=False)
