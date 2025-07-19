@@ -38,4 +38,5 @@ poetry run gunicorn -b 0.0.0.0:8000 -w 4 -k uvicorn.workers.UvicornWorker main:a
 * TX_SEARCH_BS_LIMIT - adjust the maximum blue score range for transactions/search (default: 100)
 * VSPC_REQUEST - If true enables /info/get-vscp-from-block (default: false)
 * HASHRATE_HISTORY - If true populates hashrate_history table and enables /info/hashrate/history (default: false)
+* ADDRESS_RANKINGS - If true enables /addresses/top,distribution. Requires UTXO exporter. (default: false)
 * DEBUG - Enables additional logging (default: false)

@@ -11,6 +11,7 @@ TX_SEARCH_BS_LIMIT = int(os.getenv("TX_SEARCH_BS_LIMIT", "100"))
 HEALTH_TOLERANCE_DOWN = int(os.getenv("HEALTH_TOLERANCE_DOWN", "300"))
 
 HASHRATE_HISTORY = os.getenv("HASHRATE_HISTORY", "false").lower() == "true"
+ADDRESS_RANKINGS = os.getenv("ADDRESS_RANKINGS", "false").lower() == "true"
 
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = int(os.getenv("BPS", "10"))

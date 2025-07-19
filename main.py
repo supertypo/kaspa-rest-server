@@ -14,7 +14,11 @@ from endpoints import (
     get_fee_estimate,
     get_price,
 )
-from endpoints.get_address_transactions import get_addresses_active
+from endpoints.get_address_active import get_addresses_active
+from endpoints.get_address_distribution import get_distribution_tiers
+from endpoints.get_address_names import get_addresses_names
+from endpoints.get_address_top import get_addresses_top
+from endpoints.get_address_transactions import get_full_transactions_for_address_page
 from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
@@ -44,11 +48,11 @@ from server import app, kaspad_client
 IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 print(
-    f"Loaded: {get_balance}, {get_utxos}, {get_blocks}, {get_blockdag}, {get_circulating_supply}, "
-    f"{get_kaspad_info}, {get_fee_estimate}, {get_marketcap}, {get_hashrate}, {get_hashrate_history}, "
-    f"{get_blockreward}, {get_halving}, {health_state}, {get_transaction}, {get_virtual_chain_transactions}, "
-    f"{get_virtual_selected_parent_blue_score}, {get_addresses_active}, "
-    f"{submit_a_new_transaction}, {calculate_transaction_mass}, {get_price}, {get_balances_from_kaspa_addresses}"
+    f"Loaded: {get_balance} {get_utxos} {get_blocks} {get_blockdag} {get_circulating_supply} {get_distribution_tiers}"
+    f"{get_kaspad_info} {get_fee_estimate} {get_marketcap} {get_hashrate} {get_blockreward} {get_halving} {get_hashrate_history}"
+    f"{health_state} {get_transaction} {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
+    f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names} {get_addresses_top}"
+    f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
 )
 
 if os.getenv("VSPC_REQUEST") == "true":
