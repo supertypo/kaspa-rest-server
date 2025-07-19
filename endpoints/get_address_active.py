@@ -3,8 +3,8 @@ from typing import List
 
 from fastapi import HTTPException
 from kaspa_script_address import to_script, to_address
-from pydantic import BaseModel
-from sqlalchemy import values, column, exists
+from pydantic import BaseModel, Field
+from sqlalchemy import values, column, func
 from sqlalchemy.future import select
 
 from constants import ADDRESS_EXAMPLE
@@ -20,8 +20,9 @@ class AddressesActiveRequest(BaseModel):
 
 
 class AddressesActiveResponse(BaseModel):
-    address: str
-    active: bool
+    address: str = Field(example="kaspa:qqkqkzjvr7zwxxmjxjkmxxdwju9kjs6e9u82uh59z07vgaks6gg62v8707g73")
+    active: bool = Field(example=True)
+    lastTxBlockTime: int | None = Field(example=1752924174352)
 
 
 @app.post(
@@ -51,19 +52,25 @@ async def get_addresses_active(addresses_active_request: AddressesActiveRequest)
                 [(addr,) for addr in script_addresses]
             )
             result = await s.execute(
-                select(v.c.script_public_key).where(
-                    exists().where(TxScriptMapping.script_public_key == v.c.script_public_key)
-                )
+                select(v.c.script_public_key, func.max(TxScriptMapping.block_time).label("last_tx"))
+                .join(TxScriptMapping, TxScriptMapping.script_public_key == v.c.script_public_key)
+                .group_by(v.c.script_public_key)
             )
-            addresses_used = set(to_address(ADDRESS_PREFIX, s) for s in result.scalars().all())
+            addresses_used = {to_address(ADDRESS_PREFIX, row.script_public_key): row.last_tx for row in result}
         else:
             v = values(column("address", TxAddrMapping.__table__.c.address.type), name="v").data(
                 [(addr,) for addr in addresses]
             )
-            result = await s.execute(select(v.c.address).where(exists().where(TxAddrMapping.address == v.c.address)))
-            addresses_used = set(result.scalars().all())
+            result = await s.execute(
+                select(v.c.address, func.max(TxScriptMapping.block_time).label("last_tx"))
+                .join(TxAddrMapping, TxAddrMapping.address == v.c.address)
+                .group_by(v.c.address)
+            )
+            addresses_used = {row.address: row.last_tx for row in result}
 
     return [
-        AddressesActiveResponse(address=address, active=(address in addresses_used))
+        AddressesActiveResponse(
+            address=address, active=(address in addresses_used), lastTxBlockTime=addresses_used.get(address)
+        )
         for address in addresses_active_request.addresses
     ]
