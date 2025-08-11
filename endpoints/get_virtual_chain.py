@@ -6,7 +6,7 @@ from typing import List
 from fastapi import Query, HTTPException
 from kaspa_script_address import to_address
 from pydantic import BaseModel
-from sqlalchemy import between, bindparam
+from sqlalchemy import between, bindparam, exists
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -55,8 +55,10 @@ class VcBlockModel(BaseModel):
 @app.get(
     "/virtual-chain",
     response_model=List[VcBlockModel],
-    tags=["EXPERIMENTAL: Kaspa virtual chain"],
+    tags=["Kaspa virtual chain"],
+    summary="EXPERIMENTAL - EXPECT BREAKING CHANGES: Get virtual chain transactions by blue score",
     response_model_exclude_none=True,
+    openapi_extra={"strict_query_params": True},
 )
 @sql_db_only
 async def get_virtual_chain_transactions(
@@ -66,9 +68,6 @@ async def get_virtual_chain_transactions(
     resolve_inputs: bool = Query(default=False, alias="resolveInputs"),
     include_coinbase: bool = Query(default=True, alias="includeCoinbase"),
 ):
-    """
-    EXPERIMENTAL - EXPECT BREAKING CHANGES: Get virtual chain transactions by blue score.
-    """
     if limit not in [10, 100]:
         raise HTTPException(400, "'limit' must be in [10, 100]")
     if blue_score_gte % limit != 0:
@@ -87,9 +86,8 @@ async def get_virtual_chain_transactions(
                 Block.daa_score,
                 Block.timestamp,
             )
-            .select_from(Block)
-            .join(TransactionAcceptance, Block.hash == TransactionAcceptance.block_hash)
             .where(between(Block.blue_score, blue_score_gte, blue_score_lt - 1))
+            .where(exists(select(1).where(TransactionAcceptance.block_hash == Block.hash)))
             .order_by(Block.blue_score)
         )
         chain_blocks = chain_blocks.mappings().all()
