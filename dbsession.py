@@ -9,12 +9,20 @@ _logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
-primary_engine = create_async_engine(
-    os.getenv("SQL_URI", "postgresql+asyncpg://127.0.0.1:5432"),
-    pool_pre_ping=True,
-    connect_args={"server_settings": {"enable_seqscan": "off"}},
-    echo=os.getenv("DEBUG") == "true",
-)
+
+def _make_engine(uri: str):
+    return create_async_engine(
+        uri,
+        pool_pre_ping=True,
+        connect_args={"server_settings": {"enable_seqscan": "off"}},
+        pool_size=int(os.getenv("SQL_POOL_SIZE", "15")),
+        max_overflow=int(os.getenv("SQL_POOL_MAX_OVERFLOW", "0")),
+        pool_recycle=int(os.getenv("SQL_POOL_RECYCLE_SECONDS", "1200")),
+        echo=os.getenv("DEBUG") == "true",
+    )
+
+
+primary_engine = _make_engine(os.getenv("SQL_URI", "postgresql+asyncpg://127.0.0.1:5432"))
 async_session_factory = sessionmaker(primary_engine, expire_on_commit=False, class_=AsyncSession)
 
 
@@ -23,12 +31,7 @@ def async_session():
 
 
 if os.getenv("SQL_URI_BLOCKS"):
-    blocks_engine = create_async_engine(
-        os.getenv("SQL_URI_BLOCKS"),
-        pool_pre_ping=True,
-        connect_args={"server_settings": {"enable_seqscan": "off"}},
-        echo=os.getenv("DEBUG") == "true",
-    )
+    blocks_engine = _make_engine(os.getenv("SQL_URI_BLOCKS"))
     async_session_blocks_factory = sessionmaker(blocks_engine, expire_on_commit=False, class_=AsyncSession)
 
     def async_session_blocks():
