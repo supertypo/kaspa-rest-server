@@ -5,12 +5,12 @@ from typing import List, Optional
 from fastapi import Path, Query, HTTPException
 from kaspa_script_address import to_script
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.future import select
 from starlette.responses import Response
 
 from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS
-from constants import USE_SCRIPT_FOR_ADDRESS, TX_COUNT_LIMIT
+from constants import USE_SCRIPT_FOR_ADDRESS
 from dbsession import async_session
 from endpoints import sql_db_only
 from endpoints.get_transactions import (
@@ -39,11 +39,6 @@ class TransactionsReceivedAndSpent(BaseModel):
 
 class TransactionForAddressResponse(BaseModel):
     transactions: List[TransactionsReceivedAndSpent]
-
-
-class TransactionCount(BaseModel):
-    total: int
-    limit_exceeded: bool
 
 
 @app.get(
@@ -242,68 +237,3 @@ async def get_full_transactions_for_address_page(
         max_block_time = max((r.get("block_time") for r in res))
         add_cache_control(None, max_block_time, response)
     return res
-
-
-@app.get(
-    "/addresses/{kaspaAddress}/transactions-count",
-    response_model=TransactionCount,
-    tags=["Kaspa addresses"],
-    openapi_extra={"strict_query_params": True},
-)
-@sql_db_only
-async def get_transaction_count_for_address(
-    response: Response,
-    kaspa_address: str = Path(
-        alias="kaspaAddress", description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS
-    ),
-):
-    """
-    Count the number of transactions associated with this address
-    """
-    try:
-        script = to_script(kaspa_address)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspa_address}")
-
-    async with async_session() as s:
-        if not TX_COUNT_LIMIT:
-            if USE_SCRIPT_FOR_ADDRESS:
-                result = await s.execute(select(func.count()).filter(TxScriptMapping.script_public_key == script))
-            else:
-                result = await s.execute(select(func.count()).filter(TxAddrMapping.address == kaspa_address))
-        else:
-            if USE_SCRIPT_FOR_ADDRESS:
-                result = await s.execute(
-                    select(func.count()).select_from(
-                        select(1)
-                        .filter(TxScriptMapping.script_public_key == script)
-                        .limit(TX_COUNT_LIMIT + 1)
-                        .subquery()
-                    )
-                )
-            else:
-                result = await s.execute(
-                    select(func.count()).select_from(
-                        select(1).filter(TxAddrMapping.address == kaspa_address).limit(TX_COUNT_LIMIT + 1).subquery()
-                    )
-                )
-        tx_count = result.scalar()
-
-        limit_exceeded = False
-        if TX_COUNT_LIMIT and tx_count > TX_COUNT_LIMIT:
-            tx_count = TX_COUNT_LIMIT
-            limit_exceeded = True
-
-        if limit_exceeded:
-            ttl = 3600
-        elif tx_count >= 1_000_000:
-            ttl = 600
-        elif tx_count >= 100_000:
-            ttl = 60
-        elif tx_count >= 10_000:
-            ttl = 20
-        else:
-            ttl = 8
-
-    response.headers["Cache-Control"] = f"public, max-age={ttl}"
-    return TransactionCount(total=tx_count, limit_exceeded=limit_exceeded)
