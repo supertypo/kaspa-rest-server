@@ -1,4 +1,5 @@
 # encoding: utf-8
+import logging
 from fastapi import Path, HTTPException
 from kaspa_script_address import to_script
 from pydantic import BaseModel
@@ -12,6 +13,8 @@ from dbsession import async_session
 from endpoints import sql_db_only
 from models.TxAddrMapping import TxAddrMapping, TxScriptMapping, TxScriptCount, TxAddrCount
 from server import app
+
+_logger = logging.getLogger(__name__)
 
 _table_exists: bool | None = None
 
@@ -56,6 +59,10 @@ async def get_transaction_count_for_address(
                 """)
             result = await s.execute(check_table_exists_sql)
             _table_exists = result.scalar()
+            if _table_exists:
+                _logger.info(f"Per address tx count helper table {table_name} detected")
+            else:
+                _logger.info(f"Per address tx count helper table {table_name} NOT found")
 
         if _table_exists:
             if USE_SCRIPT_FOR_ADDRESS:
