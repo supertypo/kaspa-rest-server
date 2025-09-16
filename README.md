@@ -36,7 +36,6 @@ poetry run gunicorn -b 0.0.0.0:8000 -w 4 -k uvicorn.workers.UvicornWorker main:a
 * DISABLE_PRICE - If true /info/price and /info/market-data is disabled (default: false)
 * USE_SCRIPT_FOR_ADDRESS - If true scripts_transactions will be used for address to tx, see indexer doc (default: false)
 * PREV_OUT_RESOLVED - If true tx inputs are assumed populated with sender address, see indexer doc (default: false)
-* TX_COUNT_LIMIT - adjust the maximum tx count returned by /addresses/{kaspaAddress}/transactions-count (default: 100k)
 * TX_SEARCH_ID_LIMIT - adjust the maximum number of transactionIds for transactions/search (default: 1000)
 * TX_SEARCH_BS_LIMIT - adjust the maximum blue score range for transactions/search (default: 100)
 * VSPC_REQUEST - If true enables /info/get-vscp-from-block (default: false)
