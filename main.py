@@ -19,6 +19,7 @@ from endpoints.get_address_distribution import get_distribution_tiers
 from endpoints.get_address_names import get_addresses_names
 from endpoints.get_address_top import get_addresses_top
 from endpoints.get_address_transactions import get_full_transactions_for_address_page
+from endpoints.get_address_transactions_count import get_transaction_count_for_address
 from endpoints.get_balances import get_balances_from_kaspa_addresses
 from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
@@ -53,6 +54,7 @@ print(
     f"{health_state} {get_transaction} {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names} {get_addresses_top}"
     f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
+    f"{get_transaction_count_for_address}"
 )
 
 if os.getenv("VSPC_REQUEST") == "true":
