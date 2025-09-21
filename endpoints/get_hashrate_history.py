@@ -1,5 +1,6 @@
 # encoding: utf-8
 import logging
+from datetime import date
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -35,6 +36,35 @@ _sample_interval_minutes = 15
 _crescendo_blue_score = 108554145
 
 
+@app.get("/info/hashrate/history/{day}", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
+async def get_hashrate_history_for_day(day: date, response: Response):
+    """
+    Get hashrate history for a specific UTC day (YYYY-MM-DD)
+    """
+    if not HASHRATE_HISTORY:
+        raise HTTPException(status_code=503, detail="Hashrate history is disabled")
+    response.headers["Cache-Control"] = "public, max-age=600"
+
+    today_utc = datetime.now(timezone.utc).date()
+    if day > today_utc:
+        raise HTTPException(status_code=400, detail="Day cannot be in the future")
+
+    start_ms = int(datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc).timestamp() * 1000)
+    end_ms = start_ms + 86_400_000
+
+    sample_interval = int(15 / _sample_interval_minutes)
+
+    async with async_session_blocks() as s:
+        result = await s.execute(
+            select(HashrateHistory)
+            .where(HashrateHistory.timestamp >= start_ms)
+            .where(HashrateHistory.timestamp < end_ms)
+            .order_by(HashrateHistory.daa_score.desc())
+        )
+        samples = result.scalars().all()
+        return filter_samples(samples, sample_interval)
+
+
 @app.get("/info/hashrate/history", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
 async def get_hashrate_history(
     response: Response, resolution: Optional[str] = Query(default=None, enum=["15m", "1h", "3h", "1d", "7d"])
@@ -62,27 +92,30 @@ async def get_hashrate_history(
     async with async_session_blocks() as s:
         result = await s.execute(select(HashrateHistory).order_by(HashrateHistory.daa_score.desc()))
         samples = result.scalars().all()
+        return filter_samples(samples, sample_interval)
 
-        samples_filtered = []
-        for i in range(0, len(samples), sample_interval):
-            chunk = samples[i : i + sample_interval]
-            first = chunk[-1]
-            last = chunk[0]
-            # If sampling and crossing the crescendo activation, we must create one sample before and one after
-            # Otherwise there will be artifacts produced in the graph due to the sudden reduction in difficulty
-            if first.blue_score < _crescendo_blue_score <= last.blue_score:
-                difficulty = int(bits_to_difficulty(first.bits))
-                hashrate_kh = difficulty * 2 // 1_000
-                samples_filtered.append(hashrate_history(first, None, difficulty, hashrate_kh))
-                difficulty = int(bits_to_difficulty(last.bits))
-                hashrate_kh = difficulty * 2 * 10 // 1_000
-                samples_filtered.append(hashrate_history(last, None, difficulty, hashrate_kh))
-            else:
-                bits = last.bits if sample_interval == 1 else None
-                difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
-                hashrate_kh = difficulty * 2 * (1 if last.blue_score < _crescendo_blue_score else 10) // 1_000
-                samples_filtered.append(hashrate_history(last, bits, difficulty, hashrate_kh))
-        return samples_filtered
+
+def filter_samples(samples: list[HashrateHistory], sample_interval: int) -> list[HashrateHistoryResponse]:
+    samples_filtered = []
+    for i in range(0, len(samples), sample_interval):
+        chunk = samples[i : i + sample_interval]
+        first = chunk[-1]
+        last = chunk[0]
+        # If sampling and crossing the crescendo activation, we must create one sample before and one after
+        # Otherwise there will be artifacts produced in the graph due to the sudden reduction in difficulty
+        if first.blue_score < _crescendo_blue_score <= last.blue_score:
+            difficulty = int(bits_to_difficulty(first.bits))
+            hashrate_kh = difficulty * 2 // 1_000
+            samples_filtered.append(hashrate_history(first, None, difficulty, hashrate_kh))
+            difficulty = int(bits_to_difficulty(last.bits))
+            hashrate_kh = difficulty * 2 * 10 // 1_000
+            samples_filtered.append(hashrate_history(last, None, difficulty, hashrate_kh))
+        else:
+            bits = last.bits if sample_interval == 1 else None
+            difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
+            hashrate_kh = difficulty * 2 * (1 if last.blue_score < _crescendo_blue_score else 10) // 1_000
+            samples_filtered.append(hashrate_history(last, bits, difficulty, hashrate_kh))
+    return samples_filtered
 
 
 def hashrate_history(sample, bits, difficulty, hashrate_kh):
@@ -130,6 +163,10 @@ async def create_hashrate_history_table():
             await s.execute(text(create_table_sql))
             create_index_sql = f"""
                 CREATE INDEX IF NOT EXISTS {HashrateHistory.__tablename__}_blue_score_idx ON {HashrateHistory.__tablename__} (blue_score);
+            """
+            await s.execute(text(create_index_sql))
+            create_index_sql = f"""
+                CREATE INDEX IF NOT EXISTS {HashrateHistory.__tablename__}_timestamp_idx ON {HashrateHistory.__tablename__} (timestamp);
             """
             await s.execute(text(create_index_sql))
             await s.commit()
