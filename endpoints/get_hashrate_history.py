@@ -48,6 +48,8 @@ async def get_hashrate_history_for_day(day: date, response: Response):
     today_utc = datetime.now(timezone.utc).date()
     if day > today_utc:
         raise HTTPException(status_code=400, detail="Day cannot be in the future")
+    if day < date(2021, 11, 7):
+        raise HTTPException(status_code=400, detail="Day cannot be before genesis")
 
     start_ms = int(datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc).timestamp() * 1000)
     end_ms = start_ms + 86_400_000
