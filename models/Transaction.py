@@ -1,40 +1,57 @@
-from sqlalchemy import Column, Integer, BigInteger
+from sqlalchemy import Column, Integer, BigInteger, ARRAY, String
 from sqlalchemy import SmallInteger
-from sqlalchemy.dialects.postgresql import JSONB
 
+from kaspa_script_address import to_address
+from constants import ADDRESS_PREFIX
 from dbsession import Base
+from helper.PublicKeyType import get_public_key_type
+from models.AddressColumn import AddressColumn
 from models.type_decorators.HashColumn import HashColumn
 from models.type_decorators.HexColumn import HexColumn
 
+from sqlalchemy.types import UserDefinedType
+
+
+
+# TransactionInputType = UserDefinedType(
+#     "transactions_inputs",
+#     [
+#         Column("index", SmallInteger),
+#         Column("previous_outpoint_hash", HashColumn),
+#         Column("previous_outpoint_index", SmallInteger),
+#         Column("signature_script", HexColumn),
+#         Column("sig_op_count", SmallInteger),
+#         Column("previous_outpoint_script", HexColumn),
+#         Column("previous_outpoint_amount", BigInteger),
+#     ],
+# )
+#
+# TransactionOutputType = UserDefinedType(
+#     "transactions_outputs",
+#     [
+#         Column("index", SmallInteger),
+#         Column("amount", BigInteger),
+#         Column("script_public_key", HexColumn),
+#         Column("script_public_key_address", String),
+#     ],
+# )
+
+class TransactionsInputsType(UserDefinedType):
+    def get_col_spec(self):
+        return "transactions_inputs"
+
+class TransactionsOutputsType(UserDefinedType):
+    def get_col_spec(self):
+        return "transactions_outputs"
+
 
 class Transaction(Base):
-    __tablename__ = "transactions_json"
+    __tablename__ = "transactions"
     transaction_id = Column(HashColumn, primary_key=True)
     subnetwork_id = Column(SmallInteger)
     hash = Column(HashColumn)
     mass = Column(Integer)
     payload = Column(HexColumn)
     block_time = Column(BigInteger)
-    _inputs = Column("inputs", JSONB)
-    _outputs = Column("outputs", JSONB)
-
-    @property
-    def inputs(self):
-        if not self._inputs:
-            return self._inputs
-        for item in self._inputs:
-            for k in ("signature_script", "previous_outpoint_script"):
-                v = item.get(k)
-                if isinstance(v, str) and v.startswith("\\x"):
-                    item[k] = v.replace("\\x", "")
-        return self._inputs
-
-    @property
-    def outputs(self):
-        if not self._outputs:
-            return self._outputs
-        for item in self._outputs:
-            spk = item.get("script_public_key")
-            if isinstance(spk, str) and spk.startswith("\\x"):
-                item["script_public_key"] = spk.replace("\\x", "")
-        return self._outputs
+    inputs = Column(ARRAY(String))
+    outputs = Column(ARRAY(String))
