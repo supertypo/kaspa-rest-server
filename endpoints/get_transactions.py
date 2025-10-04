@@ -3,7 +3,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from fastapi import Path, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -71,8 +71,10 @@ class TxModel(BaseModel):
     accepting_block_hash: str | None
     accepting_block_blue_score: int | None
     accepting_block_time: int | None
-    inputs: List[TxInput] | None
-    outputs: List[TxOutput] | None
+    # inputs: List[TxInput] | None
+    # outputs: List[TxOutput] | None
+    inputs: List[Any] | None
+    outputs: List[Any] | None
 
     class Config:
         orm_mode = True
@@ -171,6 +173,8 @@ async def get_transaction(
                         "inputs": tx.Transaction.inputs,
                         "outputs": tx.Transaction.outputs,
                     }
+                    logging.info(tx.Transaction.inputs)
+                    logging.info(tx.Transaction.outputs)
                     return transaction
 
                     # if inputs and (res_outpoints != "light" or PREV_OUT_RESOLVED) and res_outpoints != "full":
