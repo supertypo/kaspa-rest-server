@@ -1,13 +1,14 @@
 import logging
-import logging
 import os
 
 import psycopg
-from psycopg.types.composite import CompositeInfo
+from psycopg.types.composite import CompositeInfo, register_composite
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+from models.TransactionTypes import TransactionInput, TransactionOutput
 
 _logger = logging.getLogger(__name__)
 
@@ -23,9 +24,9 @@ def setup_composites(sqlalchemy_url: str):
     dsn = psycopg_dsn_from_sqlalchemy_url(sqlalchemy_url)
     with psycopg.connect(dsn) as conn:
         info_in = CompositeInfo.fetch(conn, "transactions_inputs")
-        info_in.register()  # registers globally in psycopg3
+        register_composite(info_in, None, factory=TransactionInput)
         info_out = CompositeInfo.fetch(conn, "transactions_outputs")
-        info_out.register()
+        register_composite(info_out, None, factory=TransactionOutput)
 
 
 setup_composites(os.getenv("SQL_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"))
@@ -53,7 +54,6 @@ def async_session():
 if os.getenv("SQL_URI_BLOCKS"):
     blocks_engine = _make_engine(os.getenv("SQL_URI_BLOCKS"))
     async_session_blocks_factory = sessionmaker(blocks_engine, expire_on_commit=False, class_=AsyncSession)
-
 
     def async_session_blocks():
         return async_session_blocks_factory()

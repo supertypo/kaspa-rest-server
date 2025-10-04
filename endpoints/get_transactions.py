@@ -71,10 +71,8 @@ class TxModel(BaseModel):
     accepting_block_hash: str | None
     accepting_block_blue_score: int | None
     accepting_block_time: int | None
-    # inputs: List[TxInput] | None
-    # outputs: List[TxOutput] | None
-    inputs: List[Any] | None
-    outputs: List[Any] | None
+    inputs: List[TxInput] | None
+    outputs: List[TxOutput] | None
 
     class Config:
         orm_mode = True
@@ -162,6 +160,11 @@ async def get_transaction(
 
                 if tx:
                     logging.debug(f"Found transaction {transactionId} in database")
+                    txid = tx.Transaction.transaction_id
+                    for i in tx.Transaction.inputs:
+                        i.transaction_id = txid
+                    for o in tx.Transaction.outputs:
+                        o.transaction_id = txid
                     transaction = {
                         "subnetwork_id": tx.Subnetwork.subnetwork_id,
                         "transaction_id": tx.Transaction.transaction_id,

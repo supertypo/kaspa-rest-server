@@ -1,46 +1,19 @@
-from sqlalchemy import Column, Integer, BigInteger, ARRAY, String
+from sqlalchemy import Column, Integer, BigInteger, ARRAY
 from sqlalchemy import SmallInteger
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.sql.type_api import UserDefinedType
 
-from kaspa_script_address import to_address
-from constants import ADDRESS_PREFIX
 from dbsession import Base
-from helper.PublicKeyType import get_public_key_type
-from models.AddressColumn import AddressColumn
 from models.type_decorators.HashColumn import HashColumn
 from models.type_decorators.HexColumn import HexColumn
 
-from sqlalchemy.types import UserDefinedType
 
-
-
-# TransactionInputType = UserDefinedType(
-#     "transactions_inputs",
-#     [
-#         Column("index", SmallInteger),
-#         Column("previous_outpoint_hash", HashColumn),
-#         Column("previous_outpoint_index", SmallInteger),
-#         Column("signature_script", HexColumn),
-#         Column("sig_op_count", SmallInteger),
-#         Column("previous_outpoint_script", HexColumn),
-#         Column("previous_outpoint_amount", BigInteger),
-#     ],
-# )
-#
-# TransactionOutputType = UserDefinedType(
-#     "transactions_outputs",
-#     [
-#         Column("index", SmallInteger),
-#         Column("amount", BigInteger),
-#         Column("script_public_key", HexColumn),
-#         Column("script_public_key_address", String),
-#     ],
-# )
-
-class TransactionsInputsType(UserDefinedType):
+class TransactionInputType(UserDefinedType):
     def get_col_spec(self):
         return "transactions_inputs"
 
-class TransactionsOutputsType(UserDefinedType):
+
+class TransactionOutputType(UserDefinedType):
     def get_col_spec(self):
         return "transactions_outputs"
 
@@ -53,5 +26,21 @@ class Transaction(Base):
     mass = Column(Integer)
     payload = Column(HexColumn)
     block_time = Column(BigInteger)
-    inputs = Column(ARRAY(String))
-    outputs = Column(ARRAY(String))
+    _inputs = Column("inputs", ARRAY(TransactionInputType))
+    _outputs = Column("outputs", ARRAY(TransactionOutputType))
+
+    @hybrid_property
+    def inputs(self):
+        if not self._inputs:
+            return None
+        for i in self._inputs:
+            i.transaction_id = self.transaction_id
+        return self._inputs
+
+    @hybrid_property
+    def outputs(self):
+        if self._outputs is None:
+            return None
+        for o in self._outputs:
+            o.transaction_id = self.transaction_id
+        return self._outputs
