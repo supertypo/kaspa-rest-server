@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -27,14 +28,6 @@ primary_engine = _make_engine(os.getenv("SQL_URI", "postgresql+psycopg://127.0.0
 async_session_factory = sessionmaker(primary_engine, expire_on_commit=False, class_=AsyncSession)
 
 
-@event.listens_for(primary_engine.sync_engine, "connect")
-def register_pg_types(conn, _):
-    with conn.cursor() as cur:
-        cur.execute("SET enable_seqscan = off")
-    register_composite(CompositeInfo.fetch(conn, "transactions_inputs"), conn)
-    register_composite(CompositeInfo.fetch(conn, "transactions_outputs"), conn)
-
-
 def async_session():
     return async_session_factory()
 
@@ -49,3 +42,23 @@ else:
 
     def async_session_blocks():
         return async_session_factory()
+
+
+async def register_pg_types_once():
+    async with primary_engine.begin() as conn:
+        raw = await conn.get_raw_connection()
+        pgconn = raw.driver_connection
+        print(type(pgconn))
+        print(repr(pgconn))
+        pgconn.execute("SET enable_seqscan = off")
+        print(type(pgconn))
+        print(repr(pgconn))
+        register_composite(CompositeInfo.fetch(conn, "transactions_inputs"), pgconn)
+        register_composite(CompositeInfo.fetch(conn, "transactions_outputs"), pgconn)
+
+
+async def init_db():
+    await register_pg_types_once()
+
+
+asyncio.run(init_db())

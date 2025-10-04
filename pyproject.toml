@@ -26,8 +26,8 @@ kaspa-script-address = "^0.0.1"
 kaspa = "^1.0.0"
 greenlet = "^3.2.4"
 sqlalchemy = "^2.0"
-sqlalchemy-utils = "^0.42.0"
 psycopg = {version = "^3.2.10", extras = ["binary", "pool", "async"]}
+sqlalchemy-utils = "^0.42.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.9"

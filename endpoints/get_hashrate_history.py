@@ -250,6 +250,7 @@ async def update_hashrate_history():
             finally:
                 await release_hashrate_history_lock(s)
         _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
+
     asyncio.create_task(loop())
 
 

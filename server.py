@@ -152,4 +152,5 @@ async def periodical_blockdag():
         while True:
             await kaspad_client.initialize_all()
             await asyncio.sleep(60)
+
     asyncio.create_task(loop())

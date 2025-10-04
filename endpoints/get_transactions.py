@@ -171,6 +171,7 @@ async def get_transaction(
                         "inputs": tx.Transaction.inputs,
                         "outputs": tx.Transaction.outputs,
                     }
+                    return transaction
 
                     # if inputs and (res_outpoints != "light" or PREV_OUT_RESOLVED) and res_outpoints != "full":
                     #     tx_inputs = await get_tx_inputs_from_db(None, res_outpoints, [transactionId])
@@ -222,6 +223,7 @@ async def get_transaction(
         raise HTTPException(
             status_code=404, detail="Transaction not found", headers={"Cache-Control": "public, max-age=3"}
         )
+
 
 #
 # @app.post(
@@ -480,6 +482,7 @@ async def get_transaction(
 #     block = await get_block_from_kaspad(block_hashes[0], True, False)
 #     return map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inputs, include_outputs)
 #
+
 
 def map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inputs, include_outputs):
     if block and "transactions" in block:

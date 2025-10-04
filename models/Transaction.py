@@ -1,18 +1,32 @@
 from sqlalchemy import Column, Integer, BigInteger
 from sqlalchemy import SmallInteger, String
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy_utils import CompositeType
-
+from sqlalchemy.types import UserDefinedType
 from dbsession import Base
 from models.type_decorators.HashColumn import HashColumn
 from models.type_decorators.HexColumn import HexColumn
 
 
-TransactionInputType = CompositeType(
+class PgComposite(UserDefinedType):
+    def __init__(self, name, fields):
+        self.name = name
+        self.fields = fields
+
+    def get_col_spec(self, **kw):
+        return self.name
+
+    def bind_processor(self, dialect):
+        return None
+
+    def result_processor(self, dialect, coltype):
+        return None
+
+
+TransactionInputType = PgComposite(
     "transactions_inputs",
     [
         Column("index", SmallInteger),
-        Column("previous_outpoint_hash", HexColumn),
+        Column("previous_outpoint_hash", HashColumn),
         Column("previous_outpoint_index", SmallInteger),
         Column("signature_script", HexColumn),
         Column("sig_op_count", SmallInteger),
@@ -21,8 +35,7 @@ TransactionInputType = CompositeType(
     ],
 )
 
-
-TransactionOutputType = CompositeType(
+TransactionOutputType = PgComposite(
     "transactions_outputs",
     [
         Column("index", SmallInteger),

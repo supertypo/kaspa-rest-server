@@ -35,10 +35,12 @@ async def get_virtual_selected_parent_blue_score():
 @app.on_event("startup")
 async def update_blue_score():
     global current_blue_score_data
+
     async def loop():
         while True:
             blue_score = await get_virtual_selected_parent_blue_score()
             current_blue_score_data["blue_score"] = int(blue_score["blueScore"])
             logging.debug(f"Updated current_blue_score: {current_blue_score_data['blue_score']}")
             await asyncio.sleep(5)
+
     asyncio.create_task(loop())

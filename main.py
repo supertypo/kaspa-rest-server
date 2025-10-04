@@ -44,10 +44,10 @@ IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 print(
     f"Loaded: {get_balance} {get_utxos} {get_blocks} {get_blockdag} {get_circulating_supply} {get_distribution_tiers}"
-    f"{get_kaspad_info} {get_fee_estimate} {get_marketcap} {get_blockreward} {get_halving} {get_hashrate_history}" #{get_hashrate}"
-    f"{health_state} {get_transaction}" #{get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
+    f"{get_kaspad_info} {get_fee_estimate} {get_marketcap} {get_blockreward} {get_halving} {get_hashrate_history}"  # {get_hashrate}"
+    f"{health_state} {get_transaction}"  # {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names} {get_addresses_top}"
-    f"{submit_a_new_transaction} {get_price} {get_balances_from_kaspa_addresses}" #{calculate_transaction_mass}"
+    f"{submit_a_new_transaction} {get_price} {get_balances_from_kaspa_addresses}"  # {calculate_transaction_mass}"
     f"{get_transaction_count_for_address}"
 )
 
