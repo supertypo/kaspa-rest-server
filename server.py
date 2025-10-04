@@ -1,4 +1,5 @@
 # encoding: utf-8
+import asyncio
 import logging
 import os
 from asyncio import wait_for
@@ -8,7 +9,6 @@ import fastapi.logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -147,6 +147,9 @@ async def unicorn_exception_handler(request: Request, exc: Exception):
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)
 async def periodical_blockdag():
-    await kaspad_client.initialize_all()
+    async def loop():
+        while True:
+            await kaspad_client.initialize_all()
+            await asyncio.sleep(60)
+    asyncio.create_task(loop())

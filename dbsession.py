@@ -4,6 +4,8 @@ import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from psycopg.types.composite import register_composite, CompositeInfo
+from sqlalchemy import event
 
 _logger = logging.getLogger(__name__)
 
@@ -14,7 +16,6 @@ def _make_engine(uri: str):
     return create_async_engine(
         uri,
         pool_pre_ping=True,
-        connect_args={"server_settings": {"enable_seqscan": "off"}},
         pool_size=int(os.getenv("SQL_POOL_SIZE", "15")),
         max_overflow=int(os.getenv("SQL_POOL_MAX_OVERFLOW", "0")),
         pool_recycle=int(os.getenv("SQL_POOL_RECYCLE_SECONDS", "1200")),
@@ -22,8 +23,16 @@ def _make_engine(uri: str):
     )
 
 
-primary_engine = _make_engine(os.getenv("SQL_URI", "postgresql+asyncpg://127.0.0.1:5432"))
+primary_engine = _make_engine(os.getenv("SQL_URI", "postgresql+psycopg://127.0.0.1:5432"))
 async_session_factory = sessionmaker(primary_engine, expire_on_commit=False, class_=AsyncSession)
+
+
+@event.listens_for(primary_engine.sync_engine, "connect")
+def register_pg_types(conn, _):
+    with conn.cursor() as cur:
+        cur.execute("SET enable_seqscan = off")
+    register_composite(CompositeInfo.fetch(conn, "transactions_inputs"), conn)
+    register_composite(CompositeInfo.fetch(conn, "transactions_outputs"), conn)
 
 
 def async_session():
