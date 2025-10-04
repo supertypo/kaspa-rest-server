@@ -5,7 +5,6 @@ KASPAD_WRPC_URL = os.getenv("KASPAD_WRPC_URL")
 USE_SCRIPT_FOR_ADDRESS = os.getenv("USE_SCRIPT_FOR_ADDRESS", "false").lower() == "true"
 PREV_OUT_RESOLVED = os.getenv("PREV_OUT_RESOLVED", "false").lower() == "true"
 
-TX_COUNT_LIMIT = int(os.getenv("TX_COUNT_LIMIT", "100_000"))
 TX_SEARCH_ID_LIMIT = int(os.getenv("TX_SEARCH_ID_LIMIT", "1_000"))
 TX_SEARCH_BS_LIMIT = int(os.getenv("TX_SEARCH_BS_LIMIT", "100"))
 HEALTH_TOLERANCE_DOWN = int(os.getenv("HEALTH_TOLERANCE_DOWN", "300"))
