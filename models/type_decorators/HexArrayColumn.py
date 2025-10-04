@@ -13,5 +13,5 @@ class HexArrayColumn(TypeDecorator):
 
     def process_result_value(self, value, dialect):
         if value is not None:
-            return [v.hex() for v in value]
+            return [v.hex() if v else v for v in value]
         return value

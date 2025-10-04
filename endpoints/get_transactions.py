@@ -14,6 +14,7 @@ from starlette.responses import Response
 from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT, PREV_OUT_RESOLVED
 from dbsession import async_session, async_session_blocks
 from endpoints import filter_fields, sql_db_only
+from endpoints.get_blocks import get_block_from_kaspad
 from helper.utils import add_cache_control
 from models.Block import Block
 from models.BlockTransaction import BlockTransaction
@@ -147,8 +148,8 @@ async def get_transaction(
                 )
                 block_hashes = block_hashes.scalars().all()
 
-            # if block_hashes and res_outpoints == "none":
-            #     transaction = await get_transaction_from_kaspad(block_hashes, transactionId, inputs, outputs)
+            if block_hashes and res_outpoints == "no":
+                transaction = await get_transaction_from_kaspad(block_hashes, transactionId, inputs, outputs)
 
             if not transaction:
                 tx = await session.execute(
@@ -176,9 +177,6 @@ async def get_transaction(
                         "inputs": tx.Transaction.inputs,
                         "outputs": tx.Transaction.outputs,
                     }
-                    logging.info(tx.Transaction.inputs)
-                    logging.info(tx.Transaction.outputs)
-                    return transaction
 
                     # if inputs and (res_outpoints != "light" or PREV_OUT_RESOLVED) and res_outpoints != "full":
                     #     tx_inputs = await get_tx_inputs_from_db(None, res_outpoints, [transactionId])
@@ -485,10 +483,10 @@ async def get_transaction(
 #         return tx_outputs_dict
 #
 #
-# async def get_transaction_from_kaspad(block_hashes, transaction_id, include_inputs, include_outputs):
-#     block = await get_block_from_kaspad(block_hashes[0], True, False)
-#     return map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inputs, include_outputs)
-#
+async def get_transaction_from_kaspad(block_hashes, transaction_id, include_inputs, include_outputs):
+    block = await get_block_from_kaspad(block_hashes[0], True, False)
+    return map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inputs, include_outputs)
+
 
 
 def map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inputs, include_outputs):
