@@ -1,15 +1,13 @@
 # encoding: utf-8
-import asyncio
 import logging
 from collections import defaultdict
 from enum import Enum
-from typing import List, Optional, Any
+from typing import List, Optional
 
 from fastapi import Path, HTTPException, Query
 from kaspa_script_address import to_address
 from pydantic import BaseModel, Field
-from sqlalchemy import exists, text, bindparam, ARRAY, INTEGER
-from sqlalchemy.dialects.postgresql import BYTEA
+from sqlalchemy import exists, text
 from sqlalchemy.future import select
 from starlette.responses import Response
 
