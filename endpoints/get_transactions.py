@@ -6,21 +6,25 @@ from enum import Enum
 from typing import List, Optional, Any
 
 from fastapi import Path, HTTPException, Query
+from kaspa_script_address import to_address
 from pydantic import BaseModel, Field
-from sqlalchemy import exists, text
+from sqlalchemy import exists, text, bindparam, ARRAY, INTEGER
+from sqlalchemy.dialects.postgresql import BYTEA
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT, PREV_OUT_RESOLVED
+from constants import TX_SEARCH_ID_LIMIT, TX_SEARCH_BS_LIMIT, PREV_OUT_RESOLVED, ADDRESS_PREFIX
 from dbsession import async_session, async_session_blocks
 from endpoints import filter_fields, sql_db_only
 from endpoints.get_blocks import get_block_from_kaspad
+from helper.PublicKeyType import get_public_key_type
 from helper.utils import add_cache_control
 from models.Block import Block
 from models.BlockTransaction import BlockTransaction
 from models.Subnetwork import Subnetwork
 from models.Transaction import Transaction
 from models.TransactionAcceptance import TransactionAcceptance
+from models.TransactionTypes import bytea_to_hex
 from server import app
 
 _logger = logging.getLogger(__name__)
@@ -175,8 +179,7 @@ async def get_transaction(
 
             if transaction:
                 if inputs and res_outpoints == "light" and not PREV_OUT_RESOLVED or res_outpoints == "full":
-                    # transaction["inputs"] = await resolve_inputs_from_db(transaction["inputs"])
-                    await resolve_inputs_from_db(transaction["inputs"])
+                    transaction["inputs"] = await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
 
                 accepted_transaction_id, accepting_block_hash = (
                     await session.execute(
@@ -410,21 +413,13 @@ async def get_transaction(
 #         return tx_blocks_dict
 #
 #
-async def resolve_inputs_from_db(inputs):
-    #     resolved_inputs_dict = {r.index: r for r in await resolve_inputs_from_db([transactionId])}
-    # for i in transaction["inputs"]:
-    #     r = resolved_inputs_dict.get(i["index"])
-    #     if r:
-    #         i["previous_outpoint_amount"] = r.previous_outpoint_amount
-    #         i["previous_outpoint_script"] = r.previous_outpoint_script
-    #         i["previous_outpoint_address"] = r.previous_outpoint_address
-
+async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
     tx_ids, tx_indices, prev_hashes, prev_indices = zip(
         *[
             (
-                format(int(i["transaction_id"], 16), "0256b"),
+                bytes.fromhex(i["transaction_id"]),
                 i["index"],
-                format(int(i["previous_outpoint_hash"], 16), "0256b"),
+                bytes.fromhex(i["previous_outpoint_hash"]),
                 i["previous_outpoint_index"],
             )
             for i in inputs
@@ -434,10 +429,10 @@ async def resolve_inputs_from_db(inputs):
     query = text("""
         WITH inputs AS (
             SELECT
-                unnest(CAST(:tx_ids AS BYTEA[])) AS transaction_id,
-                unnest(CAST(:tx_indices AS INT[])) AS index,
-                unnest(CAST(:prev_hashes AS BYTEA[])) AS previous_outpoint_hash,
-                unnest(CAST(:prev_indices AS INT[])) AS previous_outpoint_index
+                unnest(:tx_ids) AS transaction_id,
+                unnest(:tx_indices) AS index,
+                unnest(:prev_hashes) AS previous_outpoint_hash,
+                unnest(:prev_indices) AS previous_outpoint_index
         )
         SELECT
             i.transaction_id,
@@ -462,7 +457,29 @@ async def resolve_inputs_from_db(inputs):
             },
         )
         rows = result.fetchall()
-        logging.warn(rows)
+
+        resolved_inputs_dict = {(bytea_to_hex(r.transaction_id), r.index): r for r in rows}
+        for i in inputs:
+            resolved_input = resolved_inputs_dict.get((i["transaction_id"], i["index"]))
+            if resolved_input:
+                previous_outpoint_script = bytea_to_hex(resolved_input.previous_outpoint_script)
+                previous_outpoint_address = resolved_input.previous_outpoint_address
+                if not previous_outpoint_address and resolved_input.previous_outpoint_script:
+                    previous_outpoint_address = to_address(ADDRESS_PREFIX, resolved_input.previous_outpoint_script)
+                i["previous_outpoint_amount"] = resolved_input.previous_outpoint_amount
+                i["previous_outpoint_address"] = resolved_input.previous_outpoint_address
+                if resolve_previous_outpoints == PreviousOutpointLookupMode.full:
+                    i["previous_outpoint_resolved"] = {
+                        "transaction_id": i["previous_outpoint_hash"],
+                        "index": i["previous_outpoint_index"],
+                        "amount": resolved_input.previous_outpoint_amount,
+                        "script_public_key": previous_outpoint_script,
+                        "script_public_key_address": previous_outpoint_address,
+                        "script_public_key_type": get_public_key_type(previous_outpoint_script)
+                    }
+
+        return inputs
+
 
 
 # async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_ids):
