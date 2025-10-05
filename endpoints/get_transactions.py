@@ -311,7 +311,9 @@ async def search_for_transactions(
                 tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
 
     if not fields or "inputs" in fields:
-        tx_inputs = await resolve_inputs_from_db([vars(i) for tx in tx_list for i in tx.Transaction.inputs], resolve_previous_outpoints)
+        tx_inputs = await resolve_inputs_from_db(
+            [vars(i) for tx in tx_list for i in tx.Transaction.inputs], resolve_previous_outpoints
+        )
     else:
         tx_inputs = {}
     tx_blocks = await get_tx_blocks_from_db(fields, transaction_ids)
@@ -482,7 +484,7 @@ async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
                             "script_public_key_type": get_public_key_type(previous_outpoint_script),
                         }
     elif resolve_previous_outpoints == PreviousOutpointLookupMode.no:
-        for i in inputs: # Clear any pre-resolved for consistency
+        for i in inputs:  # Clear any pre-resolved for consistency
             i["previous_outpoint_amount"] = None
             i["previous_outpoint_address"] = None
 
@@ -492,65 +494,6 @@ async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
     return inputs_by_txid
 
 
-# async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_ids):
-#     tx_inputs_dict = defaultdict(list)
-#     if fields and "inputs" not in fields:
-#         return tx_inputs_dict
-#
-#     async with async_session() as session:
-#         if resolve_previous_outpoints == "light" and not PREV_OUT_RESOLVED or resolve_previous_outpoints == "full":
-#             tx_inputs = await session.execute(
-#                 select(TransactionInput, TransactionOutput)
-#                 .outerjoin(
-#                     TransactionOutput,
-#                     (TransactionOutput.transaction_id == TransactionInput.previous_outpoint_hash)
-#                     & (TransactionOutput.index == TransactionInput.previous_outpoint_index),
-#                 )
-#                 .filter(TransactionInput.transaction_id.in_(transaction_ids))
-#                 .order_by(TransactionInput.transaction_id, TransactionInput.index)
-#             )
-#             for tx_input, tx_prev_output in tx_inputs.all():
-#                 if tx_prev_output:
-#                     tx_input.previous_outpoint_script = tx_prev_output.script_public_key
-#                     tx_input.previous_outpoint_amount = tx_prev_output.amount
-#                     if resolve_previous_outpoints == "full":
-#                         tx_input.previous_outpoint_resolved = tx_prev_output
-#                 else:
-#                     tx_input.previous_outpoint_script = None
-#                     tx_input.previous_outpoint_amount = None
-#                     if resolve_previous_outpoints == "full":
-#                         tx_input.previous_outpoint_resolved = None
-#                 tx_inputs_dict[tx_input.transaction_id].append(tx_input)
-#         else:
-#             tx_inputs = await session.execute(
-#                 select(TransactionInput)
-#                 .filter(TransactionInput.transaction_id.in_(transaction_ids))
-#                 .order_by(TransactionInput.transaction_id, TransactionInput.index)
-#             )
-#             for tx_input in tx_inputs.scalars().all():
-#                 if resolve_previous_outpoints == "no" and PREV_OUT_RESOLVED:
-#                     tx_input.previous_outpoint_script = None
-#                     tx_input.previous_outpoint_amount = None
-#                 tx_inputs_dict[tx_input.transaction_id].append(tx_input)
-#         return tx_inputs_dict
-#
-#
-# async def get_tx_outputs_from_db(fields, transaction_ids):
-#     tx_outputs_dict = defaultdict(list)
-#     if fields and "outputs" not in fields:
-#         return tx_outputs_dict
-#
-#     async with async_session() as session:
-#         tx_outputs = await session.execute(
-#             select(TransactionOutput)
-#             .filter(TransactionOutput.transaction_id.in_(transaction_ids))
-#             .order_by(TransactionOutput.transaction_id, TransactionOutput.index)
-#         )
-#         for tx_output in tx_outputs.scalars().all():
-#             tx_outputs_dict[tx_output.transaction_id].append(tx_output)
-#         return tx_outputs_dict
-#
-#
 async def get_transaction_from_kaspad(block_hashes, transaction_id, include_inputs, include_outputs):
     block = await get_block_from_kaspad(block_hashes[0], True, False)
     return map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inputs, include_outputs)
