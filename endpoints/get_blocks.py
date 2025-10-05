@@ -20,6 +20,7 @@ from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
 from models.Subnetwork import Subnetwork
+
 # from models.Transaction import TransactionOutput, TransactionInput, Transaction
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
