@@ -20,8 +20,8 @@ from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
 from models.Subnetwork import Subnetwork
+from models.Transaction import Transaction
 
-# from models.Transaction import TransactionOutput, TransactionInput, Transaction
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
 
@@ -145,7 +145,7 @@ async def get_block(
     block = await get_block_from_kaspad(blockId, includeTransactions, includeColor)
     if not block and IS_SQL_DB_CONFIGURED:
         response.headers["X-Data-Source"] = "Database"
-        # block = await get_block_from_db(blockId, includeTransactions)
+        block = await get_block_from_db(blockId, includeTransactions)
         if block:
             logging.debug(f"Found block {blockId} in database")
             if includeColor:
@@ -262,36 +262,36 @@ async def get_block_from_kaspad(block_hash, include_transactions, include_color)
         return block
 
 
-# async def get_block_from_db(block_hash, include_transactions):
-#     async with async_session_blocks() as s:
-#         result = (await s.execute(block_join_query().where(Block.hash == block_hash).limit(1))).first()
-#
-#     if result:
-#         block, is_chain_block, parents, children, transaction_ids = result
-#     else:
-#         async with async_session() as s:
-#             result = (
-#                 await s.execute(
-#                     select(
-#                         BlockTransaction.transaction_id.label("transaction_id"),
-#                         Transaction.block_time.label("block_time"),
-#                     )
-#                     .join(Transaction, BlockTransaction.transaction_id == Transaction.transaction_id)
-#                     .where(BlockTransaction.block_hash == block_hash)
-#                 )
-#             ).all()
-#             if not result:
-#                 return None
-#             block = Block(hash=block_hash, timestamp=result[0].block_time)
-#             is_chain_block = None
-#             parents = []
-#             children = []
-#             transaction_ids = [row.transaction_id for row in result]
-#
-#     transactions = (
-#         await get_transactions(block.hash, transaction_ids) if include_transactions and transaction_ids else None
-#     )
-#     return map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions)
+async def get_block_from_db(block_hash, include_transactions):
+    async with async_session_blocks() as s:
+        result = (await s.execute(block_join_query().where(Block.hash == block_hash).limit(1))).first()
+
+    if result:
+        block, is_chain_block, parents, children, transaction_ids = result
+    else:
+        async with async_session() as s:
+            result = (
+                await s.execute(
+                    select(
+                        BlockTransaction.transaction_id.label("transaction_id"),
+                        Transaction.block_time.label("block_time"),
+                    )
+                    .join(Transaction, BlockTransaction.transaction_id == Transaction.transaction_id)
+                    .where(BlockTransaction.block_hash == block_hash)
+                )
+            ).all()
+            if not result:
+                return None
+            block = Block(hash=block_hash, timestamp=result[0].block_time)
+            is_chain_block = None
+            parents = []
+            children = []
+            transaction_ids = [row.transaction_id for row in result]
+
+    transactions = (
+        await get_transactions(block.hash, transaction_ids) if include_transactions and transaction_ids else None
+    )
+    return map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions)
 
 
 async def get_block_color_from_kaspad(block_hash):
@@ -376,86 +376,60 @@ def block_join_query():
     )
 
 
-# async def get_transactions(blockId, transactionIds):
-#     """
-#     Get the transactions associated with a block
-#     """
-#     async with async_session() as s:
-#         transactions = (
-#             await s.execute(
-#                 select(Transaction, Subnetwork)
-#                 .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
-#                 .filter(Transaction.transaction_id.in_(transactionIds))
-#                 .order_by(Subnetwork.id)
-#             )
-#         ).all()
-#
-#         tx_outputs = (
-#             (
-#                 await s.execute(
-#                     select(TransactionOutput)
-#                     .where(TransactionOutput.transaction_id.in_(transactionIds))
-#                     .order_by(TransactionOutput.index)
-#                 )
-#             )
-#             .scalars()
-#             .all()
-#         )
-#
-#         tx_inputs = (
-#             (
-#                 await s.execute(
-#                     select(TransactionInput)
-#                     .where(TransactionInput.transaction_id.in_(transactionIds))
-#                     .order_by(TransactionInput.index)
-#                 )
-#             )
-#             .scalars()
-#             .all()
-#         )
-#
-#     tx_list = []
-#     for tx, sub in transactions:
-#         tx_list.append(
-#             {
-#                 "inputs": [
-#                     {
-#                         "previousOutpoint": {
-#                             "transactionId": tx_inp.previous_outpoint_hash,
-#                             "index": tx_inp.previous_outpoint_index,
-#                         },
-#                         "signatureScript": tx_inp.signature_script,
-#                         "sigOpCount": tx_inp.sig_op_count,
-#                     }
-#                     for tx_inp in tx_inputs
-#                     if tx_inp.transaction_id == tx.transaction_id
-#                 ],
-#                 "outputs": [
-#                     {
-#                         "amount": tx_out.amount,
-#                         "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key, "version": 0},
-#                         "verboseData": {
-#                             "scriptPublicKeyType": tx_out.script_public_key_type,
-#                             "scriptPublicKeyAddress": tx_out.script_public_key_address,
-#                         },
-#                     }
-#                     for tx_out in tx_outputs
-#                     if tx_out.transaction_id == tx.transaction_id
-#                 ],
-#                 "subnetworkId": sub.subnetwork_id,
-#                 "payload": tx.payload,
-#                 "verboseData": {
-#                     "transactionId": tx.transaction_id,
-#                     "hash": tx.hash,
-#                     "computeMass": tx.mass,
-#                     "blockHash": blockId,
-#                     "blockTime": tx.block_time,
-#                 },
-#                 "mass": tx.mass,
-#                 "version": 0,
-#             }
-#         )
-#     return tx_list
+async def get_transactions(blockId, transactionIds):
+    """
+    Get the transactions associated with a block
+    """
+    async with async_session() as s:
+        transactions = (
+            await s.execute(
+                select(Transaction, Subnetwork)
+                .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
+                .filter(Transaction.transaction_id.in_(transactionIds))
+                .order_by(Subnetwork.id)
+            )
+        ).all()
+
+    tx_list = []
+    for tx, sub in transactions:
+        tx_list.append(
+            {
+                "inputs": [
+                    {
+                        "previousOutpoint": {
+                            "transactionId": tx_inp.previous_outpoint_hash,
+                            "index": tx_inp.previous_outpoint_index,
+                        },
+                        "signatureScript": tx_inp.signature_script,
+                        "sigOpCount": tx_inp.sig_op_count,
+                    }
+                    for tx_inp in (tx.inputs or [])
+                ],
+                "outputs": [
+                    {
+                        "amount": tx_out.amount,
+                        "scriptPublicKey": {"scriptPublicKey": tx_out.script_public_key, "version": 0},
+                        "verboseData": {
+                            "scriptPublicKeyType": tx_out.script_public_key_type,
+                            "scriptPublicKeyAddress": tx_out.script_public_key_address,
+                        },
+                    }
+                    for tx_out in (tx.outputs or [])
+                ],
+                "subnetworkId": sub.subnetwork_id,
+                "payload": tx.payload,
+                "verboseData": {
+                    "transactionId": tx.transaction_id,
+                    "hash": tx.hash,
+                    "computeMass": tx.mass,
+                    "blockHash": blockId,
+                    "blockTime": tx.block_time,
+                },
+                "mass": tx.mass,
+                "version": 0,
+            }
+        )
+    return tx_list
 
 
 def convert_to_legacy_block(block: dict) -> dict:
