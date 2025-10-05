@@ -129,7 +129,7 @@ class AcceptanceMode(str, Enum):
 @sql_db_only
 async def get_transaction(
     response: Response,
-    transactionId: str = Path(regex="[a-f0-9]{64}"),
+    transaction_id: str = Path(regex="[a-f0-9]{64}"),
     blockHash: str = Query(None, description="Specify a containing block (if known) for faster lookup"),
     inputs: bool = True,
     outputs: bool = True,
@@ -148,23 +148,23 @@ async def get_transaction(
                 block_hashes = [blockHash]
             else:
                 block_hashes = await session_blocks.execute(
-                    select(BlockTransaction.block_hash).filter(BlockTransaction.transaction_id == transactionId)
+                    select(BlockTransaction.block_hash).filter(BlockTransaction.transaction_id == transaction_id)
                 )
                 block_hashes = block_hashes.scalars().all()
 
             if block_hashes and res_outpoints == PreviousOutpointLookupMode.no:
-                transaction = await get_transaction_from_kaspad(block_hashes, transactionId, inputs, outputs)
+                transaction = await get_transaction_from_kaspad(block_hashes, transaction_id, inputs, outputs)
 
             if not transaction:
                 tx = await session.execute(
                     select(Transaction, Subnetwork)
                     .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
-                    .filter(Transaction.transaction_id == transactionId)
+                    .filter(Transaction.transaction_id == transaction_id)
                 )
                 tx = tx.first()
 
                 if tx:
-                    logging.debug(f"Found transaction {transactionId} in database")
+                    logging.debug(f"Found transaction {transaction_id} in database")
                     transaction = {
                         "subnetwork_id": tx.Subnetwork.subnetwork_id,
                         "transaction_id": tx.Transaction.transaction_id,
@@ -178,15 +178,16 @@ async def get_transaction(
                     }
 
             if transaction:
-                if inputs and res_outpoints == "light" and not PREV_OUT_RESOLVED or res_outpoints == "full":
-                    transaction["inputs"] = await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
+                transaction["inputs"] = (
+                    await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
+                ).get(transaction_id)
 
                 accepted_transaction_id, accepting_block_hash = (
                     await session.execute(
                         select(
                             TransactionAcceptance.transaction_id,
                             TransactionAcceptance.block_hash,
-                        ).filter(TransactionAcceptance.transaction_id == transactionId)
+                        ).filter(TransactionAcceptance.transaction_id == transaction_id)
                     )
                 ).one_or_none() or (None, None)
                 transaction["is_accepted"] = accepted_transaction_id is not None
@@ -219,267 +220,276 @@ async def get_transaction(
         )
 
 
-#
-# @app.post(
-#     "/transactions/search", response_model=List[TxModel], tags=["Kaspa transactions"], response_model_exclude_unset=True
-# )
-# @sql_db_only
-# async def search_for_transactions(
-#     txSearch: TxSearch,
-#     fields: str = Query(default=""),
-#     resolve_previous_outpoints: PreviousOutpointLookupMode = Query(
-#         default=PreviousOutpointLookupMode.no, description=DESC_RESOLVE_PARAM
-#     ),
-#     acceptance: Optional[AcceptanceMode] = Query(
-#         default=None, description="Only used when searching using transactionIds"
-#     ),
-# ):
-#     """
-#     Search for transactions by transaction_ids or blue_score
-#     """
-#     if not txSearch.transactionIds and not txSearch.acceptingBlueScores:
-#         return []
-#
-#     if txSearch.transactionIds and len(txSearch.transactionIds) > TX_SEARCH_ID_LIMIT:
-#         raise HTTPException(422, f"Too many transaction ids. Max {TX_SEARCH_ID_LIMIT}")
-#
-#     if txSearch.transactionIds and txSearch.acceptingBlueScores:
-#         raise HTTPException(422, "Only one of transactionIds and acceptingBlueScores must be non-null")
-#
-#     if (
-#         txSearch.acceptingBlueScores
-#         and txSearch.acceptingBlueScores.lt - txSearch.acceptingBlueScores.gte > TX_SEARCH_BS_LIMIT
-#     ):
-#         raise HTTPException(400, f"Diff between acceptingBlueScores.gte and lt must be <= {TX_SEARCH_BS_LIMIT}")
-#
-#     transaction_ids = set(txSearch.transactionIds or [])
-#     accepting_blue_score_gte = txSearch.acceptingBlueScores.gte if txSearch.acceptingBlueScores else None
-#     accepting_blue_score_lt = txSearch.acceptingBlueScores.lt if txSearch.acceptingBlueScores else None
-#
-#     fields = fields.split(",") if fields else []
-#
-#     async with async_session() as session:
-#         async with async_session_blocks() as session_blocks:
-#             tx_query = (
-#                 select(
-#                     Transaction,
-#                     Subnetwork,
-#                     TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
-#                     TransactionAcceptance.block_hash.label("accepting_block_hash"),
-#                 )
-#                 .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
-#                 .outerjoin(TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id)
-#                 .order_by(Transaction.block_time.desc())
-#             )
-#
-#             if accepting_blue_score_gte:
-#                 tx_acceptances = await session_blocks.execute(
-#                     select(
-#                         Block.hash.label("accepting_block_hash"),
-#                         Block.blue_score.label("accepting_block_blue_score"),
-#                         Block.timestamp.label("accepting_block_time"),
-#                     )
-#                     .filter(exists().where(TransactionAcceptance.block_hash == Block.hash))  # Only chain blocks
-#                     .filter(Block.blue_score >= accepting_blue_score_gte)
-#                     .filter(Block.blue_score < accepting_blue_score_lt)
-#                 )
-#                 tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
-#                 if not tx_acceptances:
-#                     return []
-#                 tx_query = tx_query.filter(TransactionAcceptance.block_hash.in_(tx_acceptances.keys()))
-#                 tx_list = (await session.execute(tx_query)).all()
-#                 transaction_ids = [row.Transaction.transaction_id for row in tx_list]
-#             else:
-#                 tx_query = tx_query.filter(Transaction.transaction_id.in_(transaction_ids))
-#                 if acceptance == AcceptanceMode.accepted:
-#                     tx_query = tx_query.filter(TransactionAcceptance.transaction_id.is_not(None))
-#                 elif acceptance == AcceptanceMode.rejected:
-#                     tx_query = tx_query.filter(TransactionAcceptance.transaction_id.is_(None))
-#                 tx_list = (await session.execute(tx_query)).all()
-#                 if not tx_list:
-#                     return []
-#                 accepting_block_hashes = [
-#                     row.accepting_block_hash for row in tx_list if row.accepting_block_hash is not None
-#                 ]
-#                 tx_acceptances = await session_blocks.execute(
-#                     select(
-#                         Block.hash.label("accepting_block_hash"),
-#                         Block.blue_score.label("accepting_block_blue_score"),
-#                         Block.timestamp.label("accepting_block_time"),
-#                     ).filter(Block.hash.in_(accepting_block_hashes))
-#                 )
-#                 tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
-#
-#     async_tasks = [
-#         get_tx_blocks_from_db(fields, transaction_ids),
-#         get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_ids),
-#         get_tx_outputs_from_db(fields, transaction_ids),
-#     ]
-#     tx_blocks, tx_inputs, tx_outputs = await asyncio.gather(*async_tasks)
-#
-#     block_cache = {}
-#     results = []
-#     for tx in tx_list:
-#         accepting_block_blue_score = None
-#         accepting_block_time = None
-#         accepting_block = tx_acceptances.get(tx.accepting_block_hash)
-#         if accepting_block:
-#             accepting_block_blue_score = accepting_block.accepting_block_blue_score
-#             accepting_block_time = accepting_block.accepting_block_time
-#         else:
-#             if tx.accepting_block_hash:
-#                 if tx.accepting_block_hash not in block_cache:
-#                     block_cache[tx.accepting_block_hash] = await get_block_from_kaspad(
-#                         tx.accepting_block_hash, False, False
-#                     )
-#                 accepting_block = block_cache[tx.accepting_block_hash]
-#                 if accepting_block and accepting_block["header"]:
-#                     accepting_block_blue_score = accepting_block["header"]["blueScore"]
-#                     accepting_block_time = accepting_block["header"]["timestamp"]
-#
-#         result = filter_fields(
-#             {
-#                 "subnetwork_id": tx.Subnetwork.subnetwork_id,
-#                 "transaction_id": tx.Transaction.transaction_id,
-#                 "hash": tx.Transaction.hash,
-#                 "mass": tx.Transaction.mass,
-#                 "payload": tx.Transaction.payload,
-#                 "block_hash": tx_blocks.get(tx.Transaction.transaction_id),
-#                 "block_time": tx.Transaction.block_time,
-#                 "is_accepted": True if tx.accepted_transaction_id else False,
-#                 "accepting_block_hash": tx.accepting_block_hash,
-#                 "accepting_block_blue_score": accepting_block_blue_score,
-#                 "accepting_block_time": accepting_block_time,
-#                 "outputs": tx_outputs.get(tx.Transaction.transaction_id),
-#                 "inputs": tx_inputs.get(tx.Transaction.transaction_id),
-#             },
-#             fields,
-#         )
-#         results.append(result)
-#     return results
-#
-#
-# @app.post(
-#     "/transactions/acceptance",
-#     response_model=List[TxAcceptanceResponse],
-#     response_model_exclude_unset=True,
-#     tags=["Kaspa transactions"],
-#     openapi_extra={"strict_query_params": True},
-# )
-# @sql_db_only
-# async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest):
-#     """
-#     Given a list of transaction_ids, return whether each one is accepted and the accepting blue score.
-#     """
-#     transaction_ids = tx_acceptance_request.transactionIds
-#     if len(transaction_ids) > TX_SEARCH_ID_LIMIT:
-#         raise HTTPException(422, f"Too many transaction ids. Max {TX_SEARCH_ID_LIMIT}")
-#
-#     async with async_session() as s:
-#         result = await s.execute(
-#             select(TransactionAcceptance.transaction_id, TransactionAcceptance.block_hash).where(
-#                 TransactionAcceptance.transaction_id.in_(set(transaction_ids))
-#             )
-#         )
-#         transaction_id_to_block_hash = {tx_id: block_hash for tx_id, block_hash in result}
-#
-#     async with async_session_blocks() as s:
-#         result = await s.execute(
-#             select(Block.hash, Block.blue_score).where(Block.hash.in_(set(transaction_id_to_block_hash.values())))
-#         )
-#         block_hash_to_blue_score = {block_hash: blue_score for block_hash, blue_score in result}
-#
-#     return [
-#         TxAcceptanceResponse(
-#             transactionId=transaction_id,
-#             accepted=(transaction_id in transaction_id_to_block_hash),
-#             acceptingBlueScore=block_hash_to_blue_score.get(transaction_id_to_block_hash.get(transaction_id)),
-#         )
-#         for transaction_id in transaction_ids
-#     ]
-#
-#
-# async def get_tx_blocks_from_db(fields, transaction_ids):
-#     tx_blocks_dict = defaultdict(list)
-#     if fields and "block_hash" not in fields:
-#         return tx_blocks_dict
-#
-#     async with async_session_blocks() as session_blocks:
-#         tx_blocks = await session_blocks.execute(
-#             select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(transaction_ids))
-#         )
-#         for row in tx_blocks.scalars().all():
-#             tx_blocks_dict[row.transaction_id].append(row.block_hash)
-#         return tx_blocks_dict
-#
-#
-async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
-    tx_ids, tx_indices, prev_hashes, prev_indices = zip(
-        *[
-            (
-                bytes.fromhex(i["transaction_id"]),
-                i["index"],
-                bytes.fromhex(i["previous_outpoint_hash"]),
-                i["previous_outpoint_index"],
-            )
-            for i in inputs
-        ]
-    )
+@app.post(
+    "/transactions/search", response_model=List[TxModel], tags=["Kaspa transactions"], response_model_exclude_unset=True
+)
+@sql_db_only
+async def search_for_transactions(
+    txSearch: TxSearch,
+    fields: str = Query(default=""),
+    resolve_previous_outpoints: PreviousOutpointLookupMode = Query(
+        default=PreviousOutpointLookupMode.no, description=DESC_RESOLVE_PARAM
+    ),
+    acceptance: Optional[AcceptanceMode] = Query(
+        default=None, description="Only used when searching using transactionIds"
+    ),
+):
+    """
+    Search for transactions by transaction_ids or blue_score
+    """
+    if not txSearch.transactionIds and not txSearch.acceptingBlueScores:
+        return []
 
-    query = text("""
-        WITH inputs AS (
-            SELECT
-                unnest(:tx_ids) AS transaction_id,
-                unnest(:tx_indices) AS index,
-                unnest(:prev_hashes) AS previous_outpoint_hash,
-                unnest(:prev_indices) AS previous_outpoint_index
-        )
-        SELECT
-            i.transaction_id,
-            i.index,
-            o.amount AS previous_outpoint_amount,
-            o.script_public_key AS previous_outpoint_script,
-            o.script_public_key_address AS previous_outpoint_address
-        FROM inputs i
-        JOIN transactions t ON t.transaction_id = i.previous_outpoint_hash
-        CROSS JOIN LATERAL unnest(t.outputs) AS o
-        WHERE o.index = i.previous_outpoint_index
-        """)
+    if txSearch.transactionIds and len(txSearch.transactionIds) > TX_SEARCH_ID_LIMIT:
+        raise HTTPException(422, f"Too many transaction ids. Max {TX_SEARCH_ID_LIMIT}")
+
+    if txSearch.transactionIds and txSearch.acceptingBlueScores:
+        raise HTTPException(422, "Only one of transactionIds and acceptingBlueScores must be non-null")
+
+    if (
+        txSearch.acceptingBlueScores
+        and txSearch.acceptingBlueScores.lt - txSearch.acceptingBlueScores.gte > TX_SEARCH_BS_LIMIT
+    ):
+        raise HTTPException(400, f"Diff between acceptingBlueScores.gte and lt must be <= {TX_SEARCH_BS_LIMIT}")
+
+    transaction_ids = set(txSearch.transactionIds or [])
+    accepting_blue_score_gte = txSearch.acceptingBlueScores.gte if txSearch.acceptingBlueScores else None
+    accepting_blue_score_lt = txSearch.acceptingBlueScores.lt if txSearch.acceptingBlueScores else None
+
+    fields = fields.split(",") if fields else []
 
     async with async_session() as session:
-        result = await session.execute(
-            query,
+        async with async_session_blocks() as session_blocks:
+            tx_query = (
+                select(
+                    Transaction,
+                    Subnetwork,
+                    TransactionAcceptance.transaction_id.label("accepted_transaction_id"),
+                    TransactionAcceptance.block_hash.label("accepting_block_hash"),
+                )
+                .join(Subnetwork, Transaction.subnetwork_id == Subnetwork.id)
+                .outerjoin(TransactionAcceptance, Transaction.transaction_id == TransactionAcceptance.transaction_id)
+                .order_by(Transaction.block_time.desc())
+            )
+
+            if accepting_blue_score_gte:
+                tx_acceptances = await session_blocks.execute(
+                    select(
+                        Block.hash.label("accepting_block_hash"),
+                        Block.blue_score.label("accepting_block_blue_score"),
+                        Block.timestamp.label("accepting_block_time"),
+                    )
+                    .filter(exists().where(TransactionAcceptance.block_hash == Block.hash))  # Only chain blocks
+                    .filter(Block.blue_score >= accepting_blue_score_gte)
+                    .filter(Block.blue_score < accepting_blue_score_lt)
+                )
+                tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
+                if not tx_acceptances:
+                    return []
+                tx_query = tx_query.filter(TransactionAcceptance.block_hash.in_(tx_acceptances.keys()))
+                tx_list = (await session.execute(tx_query)).all()
+                transaction_ids = [row.Transaction.transaction_id for row in tx_list]
+            else:
+                tx_query = tx_query.filter(Transaction.transaction_id.in_(transaction_ids))
+                if acceptance == AcceptanceMode.accepted:
+                    tx_query = tx_query.filter(TransactionAcceptance.transaction_id.is_not(None))
+                elif acceptance == AcceptanceMode.rejected:
+                    tx_query = tx_query.filter(TransactionAcceptance.transaction_id.is_(None))
+                tx_list = (await session.execute(tx_query)).all()
+                if not tx_list:
+                    return []
+                accepting_block_hashes = [
+                    row.accepting_block_hash for row in tx_list if row.accepting_block_hash is not None
+                ]
+                tx_acceptances = await session_blocks.execute(
+                    select(
+                        Block.hash.label("accepting_block_hash"),
+                        Block.blue_score.label("accepting_block_blue_score"),
+                        Block.timestamp.label("accepting_block_time"),
+                    ).filter(Block.hash.in_(accepting_block_hashes))
+                )
+                tx_acceptances = {row.accepting_block_hash: row for row in tx_acceptances.all()}
+
+    if not fields or "inputs" in fields:
+        tx_inputs = await resolve_inputs_from_db([vars(i) for tx in tx_list for i in tx.Transaction.inputs], resolve_previous_outpoints)
+    else:
+        tx_inputs = {}
+    tx_blocks = await get_tx_blocks_from_db(fields, transaction_ids)
+
+    block_cache = {}
+    results = []
+    for tx in tx_list:
+        accepting_block_blue_score = None
+        accepting_block_time = None
+        accepting_block = tx_acceptances.get(tx.accepting_block_hash)
+        if accepting_block:
+            accepting_block_blue_score = accepting_block.accepting_block_blue_score
+            accepting_block_time = accepting_block.accepting_block_time
+        else:
+            if tx.accepting_block_hash:
+                if tx.accepting_block_hash not in block_cache:
+                    block_cache[tx.accepting_block_hash] = await get_block_from_kaspad(
+                        tx.accepting_block_hash, False, False
+                    )
+                accepting_block = block_cache[tx.accepting_block_hash]
+                if accepting_block and accepting_block["header"]:
+                    accepting_block_blue_score = accepting_block["header"]["blueScore"]
+                    accepting_block_time = accepting_block["header"]["timestamp"]
+
+        result = filter_fields(
             {
-                "tx_ids": list(tx_ids),
-                "tx_indices": list(tx_indices),
-                "prev_hashes": list(prev_hashes),
-                "prev_indices": list(prev_indices),
+                "subnetwork_id": tx.Subnetwork.subnetwork_id,
+                "transaction_id": tx.Transaction.transaction_id,
+                "hash": tx.Transaction.hash,
+                "mass": tx.Transaction.mass,
+                "payload": tx.Transaction.payload,
+                "block_hash": tx_blocks.get(tx.Transaction.transaction_id),
+                "block_time": tx.Transaction.block_time,
+                "is_accepted": True if tx.accepted_transaction_id else False,
+                "accepting_block_hash": tx.accepting_block_hash,
+                "accepting_block_blue_score": accepting_block_blue_score,
+                "accepting_block_time": accepting_block_time,
+                "inputs": tx_inputs.get(tx.Transaction.transaction_id) if not fields or "inputs" in fields else None,
+                "outputs": [vars(i) for i in tx.Transaction.outputs] if not fields or "outputs" in fields else None,
             },
+            fields,
         )
-        rows = result.fetchall()
+        results.append(result)
+    return results
 
-        resolved_inputs_dict = {(bytea_to_hex(r.transaction_id), r.index): r for r in rows}
-        for i in inputs:
-            resolved_input = resolved_inputs_dict.get((i["transaction_id"], i["index"]))
-            if resolved_input:
-                previous_outpoint_script = bytea_to_hex(resolved_input.previous_outpoint_script)
-                previous_outpoint_address = resolved_input.previous_outpoint_address
-                if not previous_outpoint_address and resolved_input.previous_outpoint_script:
-                    previous_outpoint_address = to_address(ADDRESS_PREFIX, resolved_input.previous_outpoint_script)
-                i["previous_outpoint_amount"] = resolved_input.previous_outpoint_amount
-                i["previous_outpoint_address"] = resolved_input.previous_outpoint_address
-                if resolve_previous_outpoints == PreviousOutpointLookupMode.full:
-                    i["previous_outpoint_resolved"] = {
-                        "transaction_id": i["previous_outpoint_hash"],
-                        "index": i["previous_outpoint_index"],
-                        "amount": resolved_input.previous_outpoint_amount,
-                        "script_public_key": previous_outpoint_script,
-                        "script_public_key_address": previous_outpoint_address,
-                        "script_public_key_type": get_public_key_type(previous_outpoint_script)
-                    }
 
-        return inputs
+@app.post(
+    "/transactions/acceptance",
+    response_model=List[TxAcceptanceResponse],
+    response_model_exclude_unset=True,
+    tags=["Kaspa transactions"],
+    openapi_extra={"strict_query_params": True},
+)
+@sql_db_only
+async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest):
+    """
+    Given a list of transaction_ids, return whether each one is accepted and the accepting blue score.
+    """
+    transaction_ids = tx_acceptance_request.transactionIds
+    if len(transaction_ids) > TX_SEARCH_ID_LIMIT:
+        raise HTTPException(422, f"Too many transaction ids. Max {TX_SEARCH_ID_LIMIT}")
 
+    async with async_session() as s:
+        result = await s.execute(
+            select(TransactionAcceptance.transaction_id, TransactionAcceptance.block_hash).where(
+                TransactionAcceptance.transaction_id.in_(set(transaction_ids))
+            )
+        )
+        transaction_id_to_block_hash = {tx_id: block_hash for tx_id, block_hash in result}
+
+    async with async_session_blocks() as s:
+        result = await s.execute(
+            select(Block.hash, Block.blue_score).where(Block.hash.in_(set(transaction_id_to_block_hash.values())))
+        )
+        block_hash_to_blue_score = {block_hash: blue_score for block_hash, blue_score in result}
+
+    return [
+        TxAcceptanceResponse(
+            transactionId=transaction_id,
+            accepted=(transaction_id in transaction_id_to_block_hash),
+            acceptingBlueScore=block_hash_to_blue_score.get(transaction_id_to_block_hash.get(transaction_id)),
+        )
+        for transaction_id in transaction_ids
+    ]
+
+
+async def get_tx_blocks_from_db(fields, transaction_ids):
+    tx_blocks_dict = defaultdict(list)
+    if fields and "block_hash" not in fields:
+        return tx_blocks_dict
+
+    async with async_session_blocks() as session_blocks:
+        tx_blocks = await session_blocks.execute(
+            select(BlockTransaction).filter(BlockTransaction.transaction_id.in_(transaction_ids))
+        )
+        for row in tx_blocks.scalars().all():
+            tx_blocks_dict[row.transaction_id].append(row.block_hash)
+        return tx_blocks_dict
+
+
+async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
+    if (
+        resolve_previous_outpoints == PreviousOutpointLookupMode.light
+        and not PREV_OUT_RESOLVED
+        or resolve_previous_outpoints == PreviousOutpointLookupMode.full
+    ):
+        tx_ids, tx_indices, prev_hashes, prev_indices = zip(
+            *[
+                (
+                    bytes.fromhex(i["transaction_id"]),
+                    i["index"],
+                    bytes.fromhex(i["previous_outpoint_hash"]),
+                    i["previous_outpoint_index"],
+                )
+                for i in inputs
+            ]
+        )
+
+        query = text("""
+            WITH inputs AS (
+                SELECT
+                    unnest(:tx_ids) AS transaction_id,
+                    unnest(:tx_indices) AS index,
+                    unnest(:prev_hashes) AS previous_outpoint_hash,
+                    unnest(:prev_indices) AS previous_outpoint_index
+            )
+            SELECT
+                i.transaction_id,
+                i.index,
+                o.amount AS previous_outpoint_amount,
+                o.script_public_key AS previous_outpoint_script,
+                o.script_public_key_address AS previous_outpoint_address
+            FROM inputs i
+            JOIN transactions t ON t.transaction_id = i.previous_outpoint_hash
+            CROSS JOIN LATERAL unnest(t.outputs) AS o
+            WHERE o.index = i.previous_outpoint_index
+            """)
+
+        async with async_session() as session:
+            result = await session.execute(
+                query,
+                {
+                    "tx_ids": list(tx_ids),
+                    "tx_indices": list(tx_indices),
+                    "prev_hashes": list(prev_hashes),
+                    "prev_indices": list(prev_indices),
+                },
+            )
+            rows = result.fetchall()
+
+            resolved_inputs_dict = {(bytea_to_hex(r.transaction_id), r.index): r for r in rows}
+            for i in inputs:
+                resolved_input = resolved_inputs_dict.get((i["transaction_id"], i["index"]))
+                if resolved_input:
+                    previous_outpoint_script = bytea_to_hex(resolved_input.previous_outpoint_script)
+                    previous_outpoint_address = resolved_input.previous_outpoint_address
+                    if not previous_outpoint_address and resolved_input.previous_outpoint_script:
+                        previous_outpoint_address = to_address(ADDRESS_PREFIX, resolved_input.previous_outpoint_script)
+                    i["previous_outpoint_amount"] = resolved_input.previous_outpoint_amount
+                    i["previous_outpoint_address"] = resolved_input.previous_outpoint_address
+                    if resolve_previous_outpoints == PreviousOutpointLookupMode.full:
+                        i["previous_outpoint_resolved"] = {
+                            "transaction_id": i["previous_outpoint_hash"],
+                            "index": i["previous_outpoint_index"],
+                            "amount": resolved_input.previous_outpoint_amount,
+                            "script_public_key": previous_outpoint_script,
+                            "script_public_key_address": previous_outpoint_address,
+                            "script_public_key_type": get_public_key_type(previous_outpoint_script),
+                        }
+    elif resolve_previous_outpoints == PreviousOutpointLookupMode.no:
+        for i in inputs: # Clear any pre-resolved for consistency
+            i["previous_outpoint_amount"] = None
+            i["previous_outpoint_address"] = None
+
+    inputs_by_txid = {}
+    for i in inputs:
+        inputs_by_txid.setdefault(i["transaction_id"], []).append(i)
+    return inputs_by_txid
 
 
 # async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_ids):
