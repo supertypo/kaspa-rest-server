@@ -434,10 +434,10 @@ async def resolve_inputs_from_db(inputs):
     query = text("""
         WITH inputs AS (
             SELECT
-                unnest(CAST(:tx_ids AS bit(256)[])) AS transaction_id,
-                unnest(CAST(:tx_indices AS int[])) AS index,
-                unnest(CAST(:prev_hashes AS bit(256)[])) AS previous_outpoint_hash,
-                unnest(CAST(:prev_indices AS int[])) AS previous_outpoint_index
+                unnest(CAST(:tx_ids AS BYTEA[])) AS transaction_id,
+                unnest(CAST(:tx_indices AS INT[])) AS index,
+                unnest(CAST(:prev_hashes AS BYTEA[])) AS previous_outpoint_hash,
+                unnest(CAST(:prev_indices AS INT[])) AS previous_outpoint_index
         )
         SELECT
             i.transaction_id,

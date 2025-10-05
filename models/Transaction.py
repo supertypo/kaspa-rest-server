@@ -4,7 +4,6 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql.type_api import UserDefinedType
 
 from dbsession import Base
-from models.type_decorators.HashColumn import HashColumn
 from models.type_decorators.HexColumn import HexColumn
 
 
@@ -20,9 +19,9 @@ class TransactionOutputType(UserDefinedType):
 
 class Transaction(Base):
     __tablename__ = "transactions"
-    transaction_id = Column(HashColumn, primary_key=True)
+    transaction_id = Column(HexColumn, primary_key=True)
     subnetwork_id = Column(SmallInteger)
-    hash = Column(HashColumn)
+    hash = Column(HexColumn)
     mass = Column(Integer)
     payload = Column(HexColumn)
     block_time = Column(BigInteger)

@@ -6,12 +6,6 @@ from constants import ADDRESS_PREFIX
 from helper.PublicKeyType import get_public_key_type
 
 
-def bit256_to_hex(value):
-    if value is None:
-        return None
-    return f"{int(value, 2):064x}"
-
-
 def bytea_to_hex(value):
     if value is None:
         return None
@@ -22,7 +16,7 @@ def bytea_to_hex(value):
 class TransactionInput:
     transaction_id: str | None = field(default=None, init=False)
     index: int
-    previous_outpoint_hash: str
+    previous_outpoint_hash: str | bytes
     previous_outpoint_index: int
     signature_script: str | None
     sig_op_count: int | None
@@ -31,7 +25,7 @@ class TransactionInput:
     previous_outpoint_amount: int | None
 
     def __post_init__(self):
-        self.previous_outpoint_hash = bit256_to_hex(self.previous_outpoint_hash)
+        self.previous_outpoint_hash = bytea_to_hex(self.previous_outpoint_hash)
         self.signature_script = bytea_to_hex(self.signature_script)
         self.previous_outpoint_script = bytea_to_hex(self.previous_outpoint_script)
         if self.previous_outpoint_script:
