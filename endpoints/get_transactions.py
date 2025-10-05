@@ -175,7 +175,8 @@ async def get_transaction(
 
             if transaction:
                 if inputs and res_outpoints == "light" and not PREV_OUT_RESOLVED or res_outpoints == "full":
-                    transaction["inputs"] = await resolve_inputs_from_db(inputs)
+                    # transaction["inputs"] = await resolve_inputs_from_db(transaction["inputs"])
+                    await resolve_inputs_from_db(transaction["inputs"])
 
                 accepted_transaction_id, accepting_block_hash = (
                     await session.execute(
@@ -418,7 +419,7 @@ async def resolve_inputs_from_db(inputs):
     #         i["previous_outpoint_script"] = r.previous_outpoint_script
     #         i["previous_outpoint_address"] = r.previous_outpoint_address
 
-    prev_hashes, prev_indices, tx_ids, tx_input_indices = zip(
+    tx_ids, tx_indices, prev_hashes, prev_indices = zip(
         *[
             (
                 format(int(i["transaction_id"], 16), "0256b"),
@@ -431,20 +432,37 @@ async def resolve_inputs_from_db(inputs):
     )
 
     query = text("""
+        WITH inputs AS (
+            SELECT
+                unnest(CAST(:tx_ids AS bit(256)[])) AS transaction_id,
+                unnest(CAST(:tx_indices AS int[])) AS index,
+                unnest(CAST(:prev_hashes AS bit(256)[])) AS previous_outpoint_hash,
+                unnest(CAST(:prev_indices AS int[])) AS previous_outpoint_index
+        )
         SELECT
-            t_i.transaction_id,
+            i.transaction_id,
             i.index,
             o.amount AS previous_outpoint_amount,
             o.script_public_key AS previous_outpoint_script,
             o.script_public_key_address AS previous_outpoint_address
-        FROM transactions AS t_i
-        CROSS JOIN LATERAL unnest(t_i.inputs) AS i
-        LEFT JOIN transactions AS t_o ON t_o.transaction_id = i.previous_outpoint_hash
-        LEFT JOIN LATERAL unnest(t_o.outputs) AS o ON o.index = i.previous_outpoint_index
-        WHERE t_i.transaction_id = ANY(:transaction_ids)
-    """)
+        FROM inputs i
+        JOIN transactions t ON t.transaction_id = i.previous_outpoint_hash
+        CROSS JOIN LATERAL unnest(t.outputs) AS o
+        WHERE o.index = i.previous_outpoint_index
+        """)
+
     async with async_session() as session:
-        return await session.execute(query, {"transaction_ids": [format(int(t, 16), "0256b") for t in transaction_ids]})
+        result = await session.execute(
+            query,
+            {
+                "tx_ids": list(tx_ids),
+                "tx_indices": list(tx_indices),
+                "prev_hashes": list(prev_hashes),
+                "prev_indices": list(prev_indices),
+            },
+        )
+        rows = result.fetchall()
+        logging.warn(rows)
 
 
 # async def get_tx_inputs_from_db(fields, resolve_previous_outpoints, transaction_ids):
