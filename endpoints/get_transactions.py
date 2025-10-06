@@ -177,7 +177,7 @@ async def get_transaction(
 
             if transaction:
                 transaction["inputs"] = (
-                    await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
+                    await resolve_inputs_from_db(transaction["inputs"] or [], resolve_previous_outpoints)
                 ).get(transaction_id)
 
                 accepted_transaction_id, accepting_block_hash = (
@@ -310,7 +310,7 @@ async def search_for_transactions(
 
     if not fields or "inputs" in fields:
         tx_inputs = await resolve_inputs_from_db(
-            [vars(i) for tx in tx_list for i in tx.Transaction.inputs], resolve_previous_outpoints
+            [vars(i) for tx in tx_list for i in (tx.Transaction.inputs or []) if i], resolve_previous_outpoints
         )
     else:
         tx_inputs = {}
@@ -350,7 +350,9 @@ async def search_for_transactions(
                 "accepting_block_blue_score": accepting_block_blue_score,
                 "accepting_block_time": accepting_block_time,
                 "inputs": tx_inputs.get(tx.Transaction.transaction_id) if not fields or "inputs" in fields else None,
-                "outputs": [vars(i) for i in tx.Transaction.outputs] if not fields or "outputs" in fields else None,
+                "outputs": [vars(o) for o in tx.Transaction.outputs]
+                if tx.Transaction.outputs and not fields or "outputs" in fields
+                else None,
             },
             fields,
         )
@@ -484,6 +486,7 @@ async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
     elif resolve_previous_outpoints == PreviousOutpointLookupMode.no:
         for i in inputs:  # Clear any pre-resolved for consistency
             i["previous_outpoint_amount"] = None
+            i["previous_outpoint_script"] = None
             i["previous_outpoint_address"] = None
 
     inputs_by_txid = {}
