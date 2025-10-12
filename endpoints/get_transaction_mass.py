@@ -19,7 +19,7 @@ def _get_amount_from_tx_output_index(txs, tx_id, output_index: int):
         if tx["transaction_id"] == tx_id:
             for output in tx["outputs"]:
                 if output["index"] == output_index:
-                    return output.amount
+                    return output["amount"]
 
 
 @app.post(
