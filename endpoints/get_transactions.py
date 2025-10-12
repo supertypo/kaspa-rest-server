@@ -119,7 +119,7 @@ class AcceptanceMode(str, Enum):
 
 
 @app.get(
-    "/transactions/{transactionId}",
+    "/transactions/{transaction_id}",
     response_model=TxModel,
     tags=["Kaspa transactions"],
     response_model_exclude_unset=True,
