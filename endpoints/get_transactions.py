@@ -151,9 +151,10 @@ async def get_transaction(
 
             if block_hashes:
                 transaction = await get_transaction_from_kaspad(block_hashes, transaction_id, inputs, outputs)
-                transaction["inputs"] = (
-                    await resolve_inputs_from_db(transaction["inputs"] or [], resolve_previous_outpoints, False)
-                ).get(transaction_id)
+                if inputs:
+                    transaction["inputs"] = (
+                        await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints, False)
+                    ).get(transaction_id)
 
             if not transaction:
                 tx = await session.execute(
@@ -176,9 +177,10 @@ async def get_transaction(
                         "inputs": [vars(i) for i in tx.Transaction.inputs] if inputs else None,
                         "outputs": [vars(o) for o in tx.Transaction.outputs] if outputs else None,
                     }
-                    transaction["inputs"] = (
-                        await resolve_inputs_from_db(transaction["inputs"] or [], resolve_previous_outpoints)
-                    ).get(transaction_id)
+                    if inputs:
+                        transaction["inputs"] = (
+                            await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
+                        ).get(transaction_id)
 
             if transaction:
                 accepted_transaction_id, accepting_block_hash = (
@@ -416,7 +418,7 @@ async def get_tx_blocks_from_db(fields, transaction_ids):
 
 
 async def resolve_inputs_from_db(inputs, resolve_previous_outpoints, prev_out_resolved=PREV_OUT_RESOLVED):
-    if (
+    if inputs and (
         resolve_previous_outpoints == PreviousOutpointLookupMode.light
         and not prev_out_resolved
         or resolve_previous_outpoints == PreviousOutpointLookupMode.full
