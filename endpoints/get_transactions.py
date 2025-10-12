@@ -138,7 +138,6 @@ async def get_transaction(
     """
     Get details for a given transaction id
     """
-    res_outpoints = resolve_previous_outpoints
     async with async_session_blocks() as session_blocks:
         async with async_session() as session:
             transaction = None
@@ -150,8 +149,11 @@ async def get_transaction(
                 )
                 block_hashes = block_hashes.scalars().all()
 
-            if block_hashes and res_outpoints == PreviousOutpointLookupMode.no:
+            if block_hashes:
                 transaction = await get_transaction_from_kaspad(block_hashes, transaction_id, inputs, outputs)
+                transaction["inputs"] = (
+                    await resolve_inputs_from_db(transaction["inputs"] or [], resolve_previous_outpoints, False)
+                ).get(transaction_id)
 
             if not transaction:
                 tx = await session.execute(
@@ -174,12 +176,11 @@ async def get_transaction(
                         "inputs": [vars(i) for i in tx.Transaction.inputs] if inputs else None,
                         "outputs": [vars(o) for o in tx.Transaction.outputs] if outputs else None,
                     }
+                    transaction["inputs"] = (
+                        await resolve_inputs_from_db(transaction["inputs"] or [], resolve_previous_outpoints)
+                    ).get(transaction_id)
 
             if transaction:
-                transaction["inputs"] = (
-                    await resolve_inputs_from_db(transaction["inputs"] or [], resolve_previous_outpoints)
-                ).get(transaction_id)
-
                 accepted_transaction_id, accepting_block_hash = (
                     await session.execute(
                         select(
@@ -414,10 +415,10 @@ async def get_tx_blocks_from_db(fields, transaction_ids):
         return tx_blocks_dict
 
 
-async def resolve_inputs_from_db(inputs, resolve_previous_outpoints):
+async def resolve_inputs_from_db(inputs, resolve_previous_outpoints, prev_out_resolved=PREV_OUT_RESOLVED):
     if (
         resolve_previous_outpoints == PreviousOutpointLookupMode.light
-        and not PREV_OUT_RESOLVED
+        and not prev_out_resolved
         or resolve_previous_outpoints == PreviousOutpointLookupMode.full
     ):
         tx_ids, tx_indices, prev_hashes, prev_indices = zip(
