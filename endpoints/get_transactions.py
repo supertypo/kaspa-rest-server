@@ -473,10 +473,10 @@ async def resolve_inputs_from_db(inputs, resolve_previous_outpoints, prev_out_re
                 if resolved_input:
                     previous_outpoint_script = bytea_to_hex(resolved_input.previous_outpoint_script)
                     previous_outpoint_address = resolved_input.previous_outpoint_address
-                    if not previous_outpoint_address and resolved_input.previous_outpoint_script:
-                        previous_outpoint_address = to_address(ADDRESS_PREFIX, resolved_input.previous_outpoint_script)
+                    if not previous_outpoint_address and previous_outpoint_script:
+                        previous_outpoint_address = to_address(ADDRESS_PREFIX, previous_outpoint_script)
                     i["previous_outpoint_amount"] = resolved_input.previous_outpoint_amount
-                    i["previous_outpoint_address"] = resolved_input.previous_outpoint_address
+                    i["previous_outpoint_address"] = previous_outpoint_address
                     if resolve_previous_outpoints == PreviousOutpointLookupMode.full:
                         i["previous_outpoint_resolved"] = {
                             "transaction_id": i["previous_outpoint_hash"],
