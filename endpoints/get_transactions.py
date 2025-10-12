@@ -151,7 +151,7 @@ async def get_transaction(
 
             if block_hashes:
                 transaction = await get_transaction_from_kaspad(block_hashes, transaction_id, inputs, outputs)
-                if inputs:
+                if transaction and transaction["inputs"] and inputs:
                     transaction["inputs"] = (
                         await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints, False)
                     ).get(transaction_id)
@@ -177,7 +177,7 @@ async def get_transaction(
                         "inputs": [vars(i) for i in tx.Transaction.inputs] if inputs else None,
                         "outputs": [vars(o) for o in tx.Transaction.outputs] if outputs else None,
                     }
-                    if inputs:
+                    if transaction["inputs"]:
                         transaction["inputs"] = (
                             await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
                         ).get(transaction_id)
