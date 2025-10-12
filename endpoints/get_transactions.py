@@ -174,8 +174,12 @@ async def get_transaction(
                         "payload": tx.Transaction.payload,
                         "block_hash": block_hashes,
                         "block_time": tx.Transaction.block_time,
-                        "inputs": [vars(i) for i in tx.Transaction.inputs] if inputs else None,
-                        "outputs": [vars(o) for o in tx.Transaction.outputs] if outputs else None,
+                        "inputs": [vars(i) for i in tx.Transaction.inputs]
+                        if tx.Transaction.inputs and inputs
+                        else None,
+                        "outputs": [vars(o) for o in tx.Transaction.outputs]
+                        if tx.Transaction.outputs and outputs
+                        else None,
                     }
                     if transaction["inputs"]:
                         transaction["inputs"] = (
