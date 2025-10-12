@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -109,7 +110,7 @@ async def ping_server():
     if os.getenv("SQL_URI") is not None:
         async with async_session() as session:
             try:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
                 result.database.is_online = True
             except Exception as err:
                 _logger.error("Database health check failed %s", err)
