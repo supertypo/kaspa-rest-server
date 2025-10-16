@@ -151,7 +151,10 @@ async def unicorn_exception_handler(request: Request, exc: Exception):
 async def periodical_blockdag():
     async def loop():
         while True:
-            await kaspad_client.initialize_all()
+            try:
+                await kaspad_client.initialize_all()
+            except Exception as e:
+                logging.exception(f"Error initializing kaspad_client: {e}")
             await asyncio.sleep(60)
 
     asyncio.create_task(loop())
