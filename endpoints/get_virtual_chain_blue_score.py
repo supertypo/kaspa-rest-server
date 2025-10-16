@@ -38,9 +38,12 @@ async def update_blue_score():
 
     async def loop():
         while True:
-            blue_score = await get_virtual_selected_parent_blue_score()
-            current_blue_score_data["blue_score"] = int(blue_score["blueScore"])
-            logging.debug(f"Updated current_blue_score: {current_blue_score_data['blue_score']}")
+            try:
+                blue_score = await get_virtual_selected_parent_blue_score()
+                current_blue_score_data["blue_score"] = int(blue_score["blueScore"])
+                logging.debug(f"Updated current_blue_score: {current_blue_score_data['blue_score']}")
+            except Exception as e:
+                logging.exception(f"Error updating blue score: {e}")
             await asyncio.sleep(5)
 
     asyncio.create_task(loop())
