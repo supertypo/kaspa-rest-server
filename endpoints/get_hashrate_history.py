@@ -182,76 +182,85 @@ async def create_hashrate_history_table():
 
 
 @app.on_event("startup")
-async def update_hashrate_history():
+async def periodical_update_hashrate_history():
     async def loop():
-        batch_size = 1000
-
-        if not HASHRATE_HISTORY:
-            _logger.debug("Hashrate history: Disabled. Skipping update")
-            return
-
-        _logger.info("Hashrate history: Sampling hashrate history")
-        sample_count = 0
-        batch = []
-        async with async_session_blocks() as s:
-            await acquire_hashrate_history_lock(s)
+        while True:
             try:
-                result = await s.execute(select(func.max(HashrateHistory.blue_score)))
-                max_blue_score = result.scalar_one_or_none() or 0
-                bps = 1 if max_blue_score < _crescendo_blue_score else 10  # Crescendo
-                next_blue_score = 0
-                if max_blue_score > 0:
-                    next_blue_score = max_blue_score + (bps * 60 * _sample_interval_minutes)
-
-                current_blue_score = await get_virtual_selected_parent_blue_score()
-                while int(current_blue_score["blueScore"]) > next_blue_score:
-                    result = await s.execute(
-                        select(Block)
-                        .where(Block.blue_score > next_blue_score)
-                        .order_by(Block.blue_score, Block.daa_score)
-                        .limit(1 if next_blue_score > 1236000 else 2)  # blue_score was reset 2021-11-22
-                    )
-                    blocks = result.scalars().all()
-                    if not blocks:
-                        break
-                    if len(blocks) == 2:
-                        if abs(blocks[0].daa_score - blocks[1].daa_score) < 100_000:
-                            blocks = [blocks[0]]  # keep both only if they are on different sides of the reset
-                    for block in blocks:
-                        if block.blue_score and block.daa_score and block.timestamp and block.bits:
-                            batch.append(
-                                HashrateHistory(
-                                    blue_score=block.blue_score,
-                                    daa_score=block.daa_score,
-                                    timestamp=block.timestamp,
-                                    bits=block.bits,
-                                )
-                            )
-                            if len(batch) >= batch_size:
-                                s.add_all(batch)
-                                await s.commit()
-                                batch.clear()
-                            sample_count += 1
-                            t = datetime.fromtimestamp(block.timestamp / 1000, tz=timezone.utc).isoformat(
-                                timespec="seconds"
-                            )
-                            _logger.info(
-                                f"Sampled: daa={block.daa_score}, blue_score={block.blue_score}, timestamp={t}, bits={block.bits}"
-                            )
-                    block = blocks[0]
-                    bps = 1 if block.blue_score < _crescendo_blue_score else 10
-                    next_blue_score = block.blue_score + (bps * 60 * _sample_interval_minutes)
-                if batch:
-                    s.add_all(batch)
-                    await s.commit()
+                await update_hashrate_history()
             except Exception as e:
-                _logger.exception(e)
-                _logger.error("Hashrate history: Sampling failed")
-            finally:
-                await release_hashrate_history_lock(s)
-        _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
+                logging.exception(f"Failed to update hashrate history: {e}")
+            await asyncio.sleep(300)
 
     asyncio.create_task(loop())
+
+
+async def update_hashrate_history():
+    batch_size = 1000
+
+    if not HASHRATE_HISTORY:
+        _logger.debug("Hashrate history: Disabled. Skipping update")
+        return
+
+    _logger.info("Hashrate history: Sampling hashrate history")
+    sample_count = 0
+    batch = []
+    async with async_session_blocks() as s:
+        await acquire_hashrate_history_lock(s)
+        try:
+            result = await s.execute(select(func.max(HashrateHistory.blue_score)))
+            max_blue_score = result.scalar_one_or_none() or 0
+            bps = 1 if max_blue_score < _crescendo_blue_score else 10  # Crescendo
+            next_blue_score = 0
+            if max_blue_score > 0:
+                next_blue_score = max_blue_score + (bps * 60 * _sample_interval_minutes)
+
+            current_blue_score = await get_virtual_selected_parent_blue_score()
+            while int(current_blue_score["blueScore"]) > next_blue_score:
+                result = await s.execute(
+                    select(Block)
+                    .where(Block.blue_score > next_blue_score)
+                    .order_by(Block.blue_score, Block.daa_score)
+                    .limit(1 if next_blue_score > 1236000 else 2)  # blue_score was reset 2021-11-22
+                )
+                blocks = result.scalars().all()
+                if not blocks:
+                    break
+                if len(blocks) == 2:
+                    if abs(blocks[0].daa_score - blocks[1].daa_score) < 100_000:
+                        blocks = [blocks[0]]  # keep both only if they are on different sides of the reset
+                for block in blocks:
+                    if block.blue_score and block.daa_score and block.timestamp and block.bits:
+                        batch.append(
+                            HashrateHistory(
+                                blue_score=block.blue_score,
+                                daa_score=block.daa_score,
+                                timestamp=block.timestamp,
+                                bits=block.bits,
+                            )
+                        )
+                        if len(batch) >= batch_size:
+                            s.add_all(batch)
+                            await s.commit()
+                            batch.clear()
+                        sample_count += 1
+                        t = datetime.fromtimestamp(block.timestamp / 1000, tz=timezone.utc).isoformat(
+                            timespec="seconds"
+                        )
+                        _logger.info(
+                            f"Sampled: daa={block.daa_score}, blue_score={block.blue_score}, timestamp={t}, bits={block.bits}"
+                        )
+                block = blocks[0]
+                bps = 1 if block.blue_score < _crescendo_blue_score else 10
+                next_blue_score = block.blue_score + (bps * 60 * _sample_interval_minutes)
+            if batch:
+                s.add_all(batch)
+                await s.commit()
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error("Hashrate history: Sampling failed")
+        finally:
+            await release_hashrate_history_lock(s)
+    _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
 
 
 async def acquire_hashrate_history_lock(s):

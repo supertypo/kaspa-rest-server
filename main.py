@@ -25,7 +25,6 @@ from endpoints.get_blockreward import get_blockreward
 from endpoints.get_halving import get_halving
 from endpoints.get_hashrate import get_hashrate
 from endpoints.get_hashrate_history import (
-    update_hashrate_history,
     create_hashrate_history_table,
     get_hashrate_history,
 )
@@ -63,20 +62,13 @@ if os.getenv("VSPC_REQUEST") == "true":
 
 @app.on_event("startup")
 async def startup():
-    # We don't want to mess with the new filler's views!
-    # create db if needed
-    # if False and IS_SQL_DB_CONFIGURED:
-    #     await create_all(drop=False)
-    # get kaspad
     await get_kas_market_data()
 
-    # find kaspad before staring webserver
     await kaspad_client.initialize_all()
     await kaspad_rpc_client()
 
     try:
         await create_hashrate_history_table()
-        await update_hashrate_history()
     except Exception:
         pass
 
