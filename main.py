@@ -32,6 +32,7 @@ from endpoints.get_health import health_state
 from endpoints.get_marketcap import get_marketcap
 from endpoints.get_transaction_mass import calculate_transaction_mass
 from endpoints.get_transactions import get_transaction
+from endpoints.get_transactions_count import get_transaction_count_for_day
 from endpoints.get_virtual_chain import get_virtual_chain_transactions
 from endpoints.get_virtual_chain_blue_score import (
     get_virtual_selected_parent_blue_score,
@@ -51,7 +52,7 @@ print(
     f"{health_state} {get_transaction} {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names} {get_addresses_top}"
     f"{submit_a_new_transaction} {get_price} {get_balances_from_kaspa_addresses} {calculate_transaction_mass}"
-    f"{get_transaction_count_for_address}"
+    f"{get_transaction_count_for_address}, {get_transaction_count_for_day}"
 )
 
 if os.getenv("VSPC_REQUEST") == "true":
