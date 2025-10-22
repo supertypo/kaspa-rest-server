@@ -27,7 +27,7 @@ _logger = logging.getLogger(__name__)
 
 class TransactionCountResponse(BaseModel):
     timestamp: int
-    date: str
+    dateTime: str
     coinbase: int
     regular: int
 
@@ -58,7 +58,7 @@ async def get_transaction_count_totals(response: Response):
 
         return TransactionCountResponse(
             timestamp=max_ts,
-            date=datetime.fromtimestamp(max_ts / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+            dateTime=datetime.fromtimestamp(max_ts / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
             coinbase=coinbase_sum or 0,
             regular=regular_sum or 0,
         )
@@ -108,7 +108,7 @@ async def get_transaction_count_for_day(response: Response, day_or_month: str = 
         return [
             TransactionCountResponse(
                 timestamp=row.timestamp,
-                date=datetime.fromtimestamp(row.timestamp / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                dateTime=datetime.fromtimestamp(row.timestamp / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
                 coinbase=row.coinbase,
                 regular=row.regular,
             )
