@@ -26,6 +26,7 @@ _logger = logging.getLogger(__name__)
 class VcTxInput(BaseModel):
     previous_outpoint_hash: str
     previous_outpoint_index: int
+    signature_script: str | None
     previous_outpoint_script: str | None
     previous_outpoint_address: str | None
     previous_outpoint_amount: int | None
@@ -121,6 +122,7 @@ async def get_virtual_chain_transactions(
                 TransactionInput.index,
                 TransactionInput.previous_outpoint_hash,
                 TransactionInput.previous_outpoint_index,
+                TransactionInput.signature_script,
             ]
             if resolve_inputs:
                 fields.extend([TransactionInput.previous_outpoint_script, TransactionInput.previous_outpoint_amount])
@@ -137,6 +139,7 @@ async def get_virtual_chain_transactions(
                     TransactionInput.index,
                     TransactionInput.previous_outpoint_hash,
                     TransactionInput.previous_outpoint_index,
+                    TransactionInput.signature_script,
                     TransactionOutput.script_public_key.label("previous_outpoint_script"),
                     TransactionOutput.amount.label("previous_outpoint_amount"),
                 )
