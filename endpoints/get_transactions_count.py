@@ -108,7 +108,9 @@ async def get_transaction_count_for_day(response: Response, day_or_month: str = 
         return [
             TransactionCountResponse(
                 timestamp=row.timestamp,
-                dateTime=datetime.fromtimestamp(row.timestamp / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                dateTime=datetime.fromtimestamp(row.timestamp / 1000, tz=timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
                 coinbase=row.coinbase,
                 regular=row.regular,
             )
