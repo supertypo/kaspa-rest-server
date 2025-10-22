@@ -39,7 +39,7 @@ async def get_transaction_count_for_day(response: Response, day_or_month: str = 
     Count the number of transactions for a specific UTC day (YYYY-MM-DD) or month (YYYY-MM)
     """
     if not TRANSACTION_COUNT:
-        raise HTTPException(status_code=503, detail="Hashrate history is disabled")
+        raise HTTPException(status_code=503, detail="Transaction count is disabled")
 
     now = datetime.now(tz=timezone.utc)
     now_ms = now.timestamp() * 1000
