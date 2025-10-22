@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from fastapi import Path
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -29,6 +30,38 @@ class TransactionCountResponse(BaseModel):
     date: str
     coinbase: int
     regular: int
+
+
+@app.get(
+    "/transactions/count/",
+    response_model=TransactionCountResponse,
+    tags=["Kaspa transactions"],
+    summary="EXPERIMENTAL - EXPECT BREAKING CHANGES: Get the sum of accepted transactions",
+)
+async def get_transaction_count_totals(response: Response):
+    if not TRANSACTION_COUNT:
+        raise HTTPException(status_code=503, detail="Transaction count is disabled")
+
+    response.headers["Cache-Control"] = "public, max-age=300"
+
+    async with async_session() as s:
+        result = await s.execute(
+            select(
+                func.max(TransactionCount.timestamp),
+                func.sum(TransactionCount.coinbase),
+                func.sum(TransactionCount.regular),
+            )
+        )
+        max_ts, coinbase_sum, regular_sum = result.one()
+        if max_ts is None:
+            raise HTTPException(status_code=404, detail="No transaction counts available")
+
+        return TransactionCountResponse(
+            timestamp=max_ts,
+            date=datetime.fromtimestamp(max_ts / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+            coinbase=coinbase_sum or 0,
+            regular=regular_sum or 0,
+        )
 
 
 @app.get(
