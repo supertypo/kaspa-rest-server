@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from fastapi import Path
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -17,12 +17,15 @@ from constants import (
     GENESIS_START_OF_MONTH_MS,
     REGEX_DATE_OPTIONAL_DAY,
     ADDRESSES_ACTIVE_COUNT,
+    USE_SCRIPT_FOR_ADDRESS,
 )
 from dbsession import async_session
 from models.ScriptsActiveCount import ScriptsActiveCount
+from models.TxAddrMapping import TxScriptCount, TxAddrCount
 from server import app
 
 _logger = logging.getLogger(__name__)
+_table_exists: bool | None = None
 
 
 class AddressesActiveCountResponse(BaseModel):
@@ -41,23 +44,41 @@ async def get_addresses_active_count_totals(response: Response):
     if not ADDRESSES_ACTIVE_COUNT:
         raise HTTPException(status_code=503, detail="Addresses active count is disabled")
 
-    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=300"
 
     async with async_session() as s:
-        result = await s.execute(
-            select(
-                func.max(ScriptsActiveCount.timestamp),
-                func.sum(ScriptsActiveCount.count),
-            )
-        )
-        max_ts, count_sum = result.one()
-        if max_ts is None:
-            raise HTTPException(status_code=404, detail="No addresses active counts available")
+        global _table_exists
+        if _table_exists is None:
+            if USE_SCRIPT_FOR_ADDRESS:
+                table_name = TxScriptCount.__tablename__
+            else:
+                table_name = TxAddrCount.__tablename__
+            check_table_exists_sql = text(f"""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' AND table_name = '{table_name}'
+                    );
+                """)
+            result = await s.execute(check_table_exists_sql)
+            _table_exists = result.scalar()
 
+        if not _table_exists:
+            raise HTTPException(status_code=503, detail="Addresses active total count is not available")
+
+        if USE_SCRIPT_FOR_ADDRESS:
+            result = await s.execute(select(func.count()).select_from(TxScriptCount))
+        else:
+            result = await s.execute(select(func.count()).select_from(TxAddrCount))
+
+        count = result.scalar_one()
+        if count == 0:
+            raise HTTPException(status_code=404, detail="Addresses active total count is not available")
+
+        now = int(datetime.now(timezone.utc).timestamp() * 1000)
         return AddressesActiveCountResponse(
-            timestamp=max_ts,
-            dateTime=datetime.fromtimestamp(max_ts / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
-            count=count_sum or 0,
+            timestamp=now,
+            dateTime=datetime.fromtimestamp(now / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+            count=count,
         )
 
 
