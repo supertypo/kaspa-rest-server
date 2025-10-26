@@ -71,7 +71,7 @@ async def get_addresses_active_count_for_day(
     response: Response, day_or_month: str = Path(pattern=REGEX_DATE_OPTIONAL_DAY)
 ):
     if not ADDRESSES_ACTIVE_COUNT:
-        raise HTTPException(status_code=503, detail="Transaction count is disabled")
+        raise HTTPException(status_code=503, detail="Addresses active count is disabled")
 
     now = datetime.now(tz=timezone.utc)
     now_ms = now.timestamp() * 1000
