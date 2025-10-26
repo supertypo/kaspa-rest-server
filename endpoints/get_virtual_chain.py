@@ -25,6 +25,7 @@ _logger = logging.getLogger(__name__)
 class VcTxInput(BaseModel):
     previous_outpoint_hash: str
     previous_outpoint_index: int
+    signature_script: str | None
     previous_outpoint_script: str | None
     previous_outpoint_address: str | None
     previous_outpoint_amount: int | None
