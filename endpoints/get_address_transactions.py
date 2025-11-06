@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS
+from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS, GENESIS_MS
 from constants import USE_SCRIPT_FOR_ADDRESS
 from dbsession import async_session
 from endpoints import sql_db_only
@@ -21,6 +21,7 @@ from endpoints.get_transactions import (
     AcceptanceMode,
 )
 from helper.utils import add_cache_control
+from models.TransactionAcceptance import TransactionAcceptance
 from models.TxAddrMapping import TxAddrMapping, TxScriptMapping
 from server import app
 
@@ -168,7 +169,7 @@ async def get_full_transactions_for_address_page(
     if before != 0 and after != 0:
         raise HTTPException(status_code=400, detail="Only one of [before, after] can be present")
     elif before != 0:
-        if before <= 1636298787842:  # genesis block_time
+        if before <= GENESIS_MS:
             return []
         if USE_SCRIPT_FOR_ADDRESS:
             query = query.filter(TxScriptMapping.block_time < before).order_by(TxScriptMapping.block_time.desc())
@@ -186,6 +187,20 @@ async def get_full_transactions_for_address_page(
             query = query.order_by(TxScriptMapping.block_time.desc())
         else:
             query = query.order_by(TxAddrMapping.block_time.desc())
+
+    if acceptance:
+        if USE_SCRIPT_FOR_ADDRESS:
+            query = query.outerjoin(
+                TransactionAcceptance, TxScriptMapping.transaction_id == TransactionAcceptance.transaction_id
+            )
+        else:
+            query = query.outerjoin(
+                TransactionAcceptance, TxAddrMapping.transaction_id == TransactionAcceptance.transaction_id
+            )
+        if acceptance == AcceptanceMode.accepted:
+            query = query.where(TransactionAcceptance.transaction_id.isnot(None))
+        else:
+            query = query.where(TransactionAcceptance.transaction_id.is_(None))
 
     async with async_session() as s:
         tx_within_limit_before = await s.execute(query)
