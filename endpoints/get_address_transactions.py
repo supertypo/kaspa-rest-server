@@ -128,7 +128,7 @@ async def get_full_transactions_for_address_page(
         description="The max number of records to get. "
         "For paging combine with using 'before/after' from oldest previous result. "
         "Use value of X-Next-Page-Before/-After as long as header is present to continue paging. "
-        "The actual number of transactions returned for each page can be > limit.",
+        "The actual number of transactions returned for each page can be != limit.",
         ge=1,
         le=500,
         default=50,
@@ -234,7 +234,6 @@ async def get_full_transactions_for_address_page(
                 )
             tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
 
-    response.headers["X-Page-Count"] = str(len(tx_ids))
     if len(tx_ids) >= limit:
         response.headers["X-Next-Page-After"] = str(newest_block_time)
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
@@ -242,6 +241,7 @@ async def get_full_transactions_for_address_page(
     res = await search_for_transactions(
         TxSearch(transactionIds=list(tx_ids), acceptingBlueScores=None), fields, resolve_previous_outpoints, acceptance
     )
+    response.headers["X-Page-Count"] = str(len(res))
     if before:
         add_cache_control(None, before, response)
     elif after and len(tx_ids) >= limit:
