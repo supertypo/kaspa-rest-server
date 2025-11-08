@@ -188,19 +188,15 @@ async def get_full_transactions_for_address_page(
         else:
             query = query.order_by(TxAddrMapping.block_time.desc())
 
-    if acceptance:
+    if acceptance == AcceptanceMode.accepted:
         if USE_SCRIPT_FOR_ADDRESS:
-            query = query.outerjoin(
+            query = query.join(
                 TransactionAcceptance, TxScriptMapping.transaction_id == TransactionAcceptance.transaction_id
             )
         else:
-            query = query.outerjoin(
+            query = query.join(
                 TransactionAcceptance, TxAddrMapping.transaction_id == TransactionAcceptance.transaction_id
             )
-        if acceptance == AcceptanceMode.accepted:
-            query = query.where(TransactionAcceptance.transaction_id.isnot(None))
-        else:
-            query = query.where(TransactionAcceptance.transaction_id.is_(None))
 
     async with async_session() as s:
         tx_within_limit_before = await s.execute(query)
