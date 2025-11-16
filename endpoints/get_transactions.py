@@ -104,7 +104,9 @@ class TxAcceptanceRequest(BaseModel):
 class TxAcceptanceResponse(BaseModel):
     transactionId: str = "b9382bdee4aa364acf73eda93914eaae61d0e78334d1b8a637ab89ef5e224e41"
     accepted: bool
+    acceptingBlockHash: str | None
     acceptingBlueScore: int | None
+    acceptingTimestamp: int | None
 
 
 class PreviousOutpointLookupMode(str, Enum):
@@ -377,7 +379,7 @@ async def search_for_transactions(
 @sql_db_only
 async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest):
     """
-    Given a list of transaction_ids, return whether each one is accepted and the accepting blue score.
+    Given a list of transaction_ids, return whether each one is accepted and the accepting blue score and timestamp.
     """
     transaction_ids = tx_acceptance_request.transactionIds
     if len(transaction_ids) > TX_SEARCH_ID_LIMIT:
@@ -393,18 +395,26 @@ async def get_transaction_acceptance(tx_acceptance_request: TxAcceptanceRequest)
 
     async with async_session_blocks() as s:
         result = await s.execute(
-            select(Block.hash, Block.blue_score).where(Block.hash.in_(set(transaction_id_to_block_hash.values())))
+            select(Block.hash, Block.blue_score, Block.timestamp).where(
+                Block.hash.in_(set(transaction_id_to_block_hash.values()))
+            )
         )
-        block_hash_to_blue_score = {block_hash: blue_score for block_hash, blue_score in result}
+        block_hash_to_info = {block_hash: (blue_score, timestamp) for block_hash, blue_score, timestamp in result}
 
-    return [
-        TxAcceptanceResponse(
-            transactionId=transaction_id,
-            accepted=(transaction_id in transaction_id_to_block_hash),
-            acceptingBlueScore=block_hash_to_blue_score.get(transaction_id_to_block_hash.get(transaction_id)),
+    responses = []
+    for tx_id in transaction_ids:
+        block_hash = transaction_id_to_block_hash.get(tx_id)
+        blue_score, timestamp = block_hash_to_info.get(block_hash, (None, None))
+        responses.append(
+            TxAcceptanceResponse(
+                transactionId=tx_id,
+                accepted=block_hash is not None,
+                acceptingBlockHash=block_hash,
+                acceptingBlueScore=blue_score,
+                acceptingTimestamp=timestamp,
+            )
         )
-        for transaction_id in transaction_ids
-    ]
+    return responses
 
 
 async def get_tx_blocks_from_db(fields, transaction_ids):
