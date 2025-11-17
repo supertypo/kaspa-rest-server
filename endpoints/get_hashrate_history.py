@@ -1,4 +1,5 @@
 # encoding: utf-8
+import calendar
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,7 +12,14 @@ from sqlalchemy import select, text, func
 from starlette.responses import Response
 
 from fastapi import Path
-from constants import HASHRATE_HISTORY, REGEX_DATE, A_DAY_MS, GENESIS_START_OF_DAY_MS, AN_HOUR_MS
+from constants import (
+    HASHRATE_HISTORY,
+    A_DAY_MS,
+    GENESIS_START_OF_DAY_MS,
+    AN_HOUR_MS,
+    REGEX_DATE_OPTIONAL_DAY,
+    GENESIS_START_OF_MONTH_MS,
+)
 from dbsession import async_session_blocks
 from endpoints.get_virtual_chain_blue_score import get_virtual_selected_parent_blue_score
 from helper.difficulty_calculation import bits_to_difficulty
@@ -36,30 +44,54 @@ _sample_interval_minutes = 15
 _crescendo_blue_score = 108554145
 
 
-@app.get("/info/hashrate/history/{day}", response_model=list[HashrateHistoryResponse], tags=["Kaspa network info"])
-async def get_hashrate_history_for_day(response: Response, day: str = Path(pattern=REGEX_DATE)):
+@app.get(
+    "/info/hashrate/history/{day_or_month}",
+    response_model=list[HashrateHistoryResponse],
+    tags=["Kaspa network info"],
+)
+async def get_hashrate_history_for_day_or_month(
+    response: Response,
+    day_or_month: str = Path(pattern=REGEX_DATE_OPTIONAL_DAY),
+    resolution: Optional[str] = Query(default=None, enum=["15m", "1h"]),
+):
     """
-    Get hashrate history for a specific UTC day (YYYY-MM-DD)
+    Get hashrate history for a specific UTC day (YYYY-MM-DD) or month (YYYY-MM)
     """
     if not HASHRATE_HISTORY:
         raise HTTPException(status_code=503, detail="Hashrate history is disabled")
 
-    dt = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    start_ms = int(dt.timestamp() * 1000)
-    end_ms = start_ms + A_DAY_MS
-    now_ms = datetime.now(tz=timezone.utc).timestamp() * 1000
+    now = datetime.now(tz=timezone.utc)
+    now_ms = now.timestamp() * 1000
 
-    if end_ms < now_ms - A_DAY_MS:
-        response.headers["Cache-Control"] = "public, max-age=86400"
-    elif end_ms < now_ms - AN_HOUR_MS:
-        response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "public, max-age=300"
+
+    if len(day_or_month) == 10:
+        dt = datetime.strptime(day_or_month, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        start_ms = int(dt.timestamp() * 1000)
+        if start_ms < GENESIS_START_OF_DAY_MS or start_ms > now_ms:
+            return []
+        end_ms = start_ms + A_DAY_MS
     else:
+        dt = datetime.strptime(day_or_month, "%Y-%m").replace(tzinfo=timezone.utc)
+        start_ms = int(dt.timestamp() * 1000)
+        _, days_in_month = calendar.monthrange(dt.year, dt.month)
+        end_ms = start_ms + days_in_month * A_DAY_MS
+        if start_ms < GENESIS_START_OF_MONTH_MS or start_ms > now_ms:
+            return []
+
+    if end_ms < now_ms - 2 * A_DAY_MS:
+        response.headers["Cache-Control"] = "public, max-age=3600"
+    elif end_ms < now_ms - 2 * AN_HOUR_MS:
         response.headers["Cache-Control"] = "public, max-age=600"
 
-    if start_ms < GENESIS_START_OF_DAY_MS or start_ms > now_ms:
-        return []
-
-    sample_interval = int(15 / _sample_interval_minutes)
+    resolution_map = {
+        None: int(15 / _sample_interval_minutes),
+        "15m": int(15 / _sample_interval_minutes),
+        "1h": int(60 / _sample_interval_minutes),
+    }
+    sample_interval = resolution_map.get(resolution)
+    if not sample_interval:
+        raise HTTPException(status_code=400, detail=f"Invalid resolution, allowed: {list(resolution_map.keys())}")
 
     async with async_session_blocks() as s:
         result = await s.execute(
@@ -82,7 +114,7 @@ async def get_hashrate_history(
     if not HASHRATE_HISTORY:
         raise HTTPException(status_code=503, detail="Hashrate history is disabled")
 
-    response.headers["Cache-Control"] = "public, max-age=600"
+    response.headers["Cache-Control"] = "public, max-age=3600"
 
     resolution_map = {
         None: int(60 / _sample_interval_minutes),
