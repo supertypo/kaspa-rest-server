@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import Path, Query, HTTPException
 from kaspa_script_address import to_script
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import or_, exists
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -234,8 +234,52 @@ async def get_full_transactions_for_address_page(
                 )
             tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
 
-    if len(tx_ids) >= limit:
+        # Check for more data before/after for pagination purposes
+        if before or after:
+            if USE_SCRIPT_FOR_ADDRESS:
+                has_newer = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxScriptMapping.script_public_key == script)
+                            & (TxScriptMapping.block_time > newest_block_time)
+                        )
+                    )
+                )
+            else:
+                has_newer = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxAddrMapping.address == kaspa_address) & (TxAddrMapping.block_time > newest_block_time)
+                        )
+                    )
+                )
+        else:
+            has_newer = False
+
+        if not after or after >= GENESIS_MS:
+            if USE_SCRIPT_FOR_ADDRESS:
+                has_older = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxScriptMapping.script_public_key == script)
+                            & (TxScriptMapping.block_time < oldest_block_time)
+                        )
+                    )
+                )
+            else:
+                has_older = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxAddrMapping.address == kaspa_address) & (TxAddrMapping.block_time < oldest_block_time)
+                        )
+                    )
+                )
+        else:
+            has_older = False
+
+    if has_newer:
         response.headers["X-Next-Page-After"] = str(newest_block_time)
+    if has_older:
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
 
     res = await search_for_transactions(
