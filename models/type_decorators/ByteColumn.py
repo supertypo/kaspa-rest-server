@@ -1,4 +1,5 @@
 import logging
+
 from sqlalchemy import TypeDecorator
 from sqlalchemy.dialects.postgresql import BYTEA
 

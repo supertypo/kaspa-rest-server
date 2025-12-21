@@ -4,19 +4,18 @@ from collections import defaultdict
 from typing import List
 
 from fastapi import Query, HTTPException
-from kaspa_script_address import to_address
 from pydantic import BaseModel
 from sqlalchemy import between, bindparam, exists
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import ADDRESS_PREFIX, PREV_OUT_RESOLVED
 from dbsession import async_session, async_session_blocks
 from endpoints import sql_db_only
+from endpoints.get_transactions import resolve_inputs_from_db, PreviousOutpointLookupMode
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.utils import add_cache_control
 from models.Block import Block
-from models.Transaction import TransactionInput, TransactionOutput
+from models.Transaction import Transaction
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app
 
@@ -116,85 +115,33 @@ async def get_virtual_chain_transactions(
     del accepted_txs
 
     async with async_session() as session:
-        if PREV_OUT_RESOLVED or not resolve_inputs:
-            fields = [
-                TransactionInput.transaction_id,
-                TransactionInput.index,
-                TransactionInput.previous_outpoint_hash,
-                TransactionInput.previous_outpoint_index,
-                TransactionInput.signature_script,
-            ]
-            if resolve_inputs:
-                fields.extend([TransactionInput.previous_outpoint_script, TransactionInput.previous_outpoint_amount])
-            tx_inputs = await session.execute(
-                select(*fields)
-                .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
-                .order_by(TransactionInput.transaction_id, TransactionInput.index),
-                {"transaction_ids": transaction_ids},
-            )
-        else:
-            tx_inputs = await session.execute(
-                select(
-                    TransactionInput.transaction_id,
-                    TransactionInput.index,
-                    TransactionInput.previous_outpoint_hash,
-                    TransactionInput.previous_outpoint_index,
-                    TransactionInput.signature_script,
-                    TransactionOutput.script_public_key.label("previous_outpoint_script"),
-                    TransactionOutput.amount.label("previous_outpoint_amount"),
+        tx_list = (
+            (
+                await session.execute(
+                    select(Transaction).where(
+                        Transaction.transaction_id.in_(bindparam("transaction_ids", expanding=True))
+                    ),
+                    {"transaction_ids": transaction_ids},
                 )
-                .outerjoin(
-                    TransactionOutput,
-                    (TransactionOutput.transaction_id == TransactionInput.previous_outpoint_hash)
-                    & (TransactionOutput.index == TransactionInput.previous_outpoint_index),
-                )
-                .where(TransactionInput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
-                .order_by(TransactionInput.transaction_id, TransactionInput.index),
-                {"transaction_ids": transaction_ids},
             )
-        tx_inputs = tx_inputs.mappings().all()
-
-    tx_inputs_dict = defaultdict(list)
-    for tx_input in tx_inputs:
-        if resolve_inputs:
-            tx_input = dict(tx_input)
-            if resolve_inputs and tx_input["previous_outpoint_script"]:
-                tx_input["previous_outpoint_address"] = to_address(ADDRESS_PREFIX, tx_input["previous_outpoint_script"])
-        tx_inputs_dict[tx_input["transaction_id"]].append(tx_input)
-    del tx_inputs
-
-    if not include_coinbase:
-        transaction_ids = [tx_id for tx_id in transaction_ids if tx_id in tx_inputs_dict]
-    if not transaction_ids:
-        return []
-
-    async with async_session() as session:
-        tx_outputs = await session.execute(
-            select(
-                TransactionOutput.transaction_id,
-                TransactionOutput.index,
-                TransactionOutput.amount,
-                TransactionOutput.script_public_key,
-            )
-            .where(TransactionOutput.transaction_id.in_(bindparam("transaction_ids", expanding=True)))
-            .order_by(TransactionOutput.transaction_id, TransactionOutput.index),
-            {"transaction_ids": transaction_ids},
+            .scalars()
+            .all()
         )
-        tx_outputs = tx_outputs.mappings().all()
 
-    tx_outputs_dict = defaultdict(list)
-    for tx_output in tx_outputs:
-        tx_output = dict(tx_output)
-        tx_output["script_public_key_address"] = to_address(ADDRESS_PREFIX, tx_output["script_public_key"])
-        tx_outputs_dict[tx_output["transaction_id"]].append(tx_output)
-    del tx_outputs
+    tx_inputs = await resolve_inputs_from_db(
+        [vars(i) for tx in tx_list for i in (tx.inputs or []) if i],
+        PreviousOutpointLookupMode.light if resolve_inputs else PreviousOutpointLookupMode.no,
+    )
+    tx_outputs = {}
+    for o in [vars(o) for tx in tx_list for o in (tx.outputs or []) if o]:
+        tx_outputs.setdefault(o["transaction_id"], []).append(o)
 
     results = []
     for chain_block in chain_blocks:
         transactions = []
         for tx_id in accepted_txs_dict[chain_block["hash"]]:
-            inputs = [VcTxInput(**inp) for inp in tx_inputs_dict[tx_id]] or None
-            outputs = [VcTxOutput(**out) for out in tx_outputs_dict[tx_id]] or None
+            inputs = tx_inputs.get(tx_id)
+            outputs = tx_outputs.get(tx_id)
             if include_coinbase or inputs:
                 transactions.append(VcTxModel(transaction_id=tx_id, inputs=inputs, outputs=outputs))
 

@@ -20,7 +20,8 @@ from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
 from models.Subnetwork import Subnetwork
-from models.Transaction import TransactionOutput, TransactionInput, Transaction
+from models.Transaction import Transaction
+
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
 
@@ -389,30 +390,6 @@ async def get_transactions(blockId, transactionIds):
             )
         ).all()
 
-        tx_outputs = (
-            (
-                await s.execute(
-                    select(TransactionOutput)
-                    .where(TransactionOutput.transaction_id.in_(transactionIds))
-                    .order_by(TransactionOutput.index)
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-        tx_inputs = (
-            (
-                await s.execute(
-                    select(TransactionInput)
-                    .where(TransactionInput.transaction_id.in_(transactionIds))
-                    .order_by(TransactionInput.index)
-                )
-            )
-            .scalars()
-            .all()
-        )
-
     tx_list = []
     for tx, sub in transactions:
         tx_list.append(
@@ -426,8 +403,7 @@ async def get_transactions(blockId, transactionIds):
                         "signatureScript": tx_inp.signature_script,
                         "sigOpCount": tx_inp.sig_op_count,
                     }
-                    for tx_inp in tx_inputs
-                    if tx_inp.transaction_id == tx.transaction_id
+                    for tx_inp in (tx.inputs or [])
                 ],
                 "outputs": [
                     {
@@ -438,8 +414,7 @@ async def get_transactions(blockId, transactionIds):
                             "scriptPublicKeyAddress": tx_out.script_public_key_address,
                         },
                     }
-                    for tx_out in tx_outputs
-                    if tx_out.transaction_id == tx.transaction_id
+                    for tx_out in (tx.outputs or [])
                 ],
                 "subnetworkId": sub.subnetwork_id,
                 "payload": tx.payload,
