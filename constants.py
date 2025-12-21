@@ -10,6 +10,7 @@ TX_SEARCH_BS_LIMIT = int(os.getenv("TX_SEARCH_BS_LIMIT", "100"))
 HEALTH_TOLERANCE_DOWN = int(os.getenv("HEALTH_TOLERANCE_DOWN", "300"))
 
 TRANSACTION_COUNT = os.getenv("TRANSACTION_COUNT", "false").lower() == "true"
+ADDRESSES_ACTIVE_COUNT = os.getenv("ADDRESSES_ACTIVE_COUNT", "false").lower() == "true"
 HASHRATE_HISTORY = os.getenv("HASHRATE_HISTORY", "false").lower() == "true"
 ADDRESS_RANKINGS = os.getenv("ADDRESS_RANKINGS", "false").lower() == "true"
 
