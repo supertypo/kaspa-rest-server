@@ -5,11 +5,11 @@ from typing import List, Optional
 from fastapi import Path, Query, HTTPException
 from kaspa_script_address import to_script
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import or_, exists
 from sqlalchemy.future import select
 from starlette.responses import Response
 
-from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS
+from constants import ADDRESS_EXAMPLE, REGEX_KASPA_ADDRESS, GENESIS_MS
 from constants import USE_SCRIPT_FOR_ADDRESS
 from dbsession import async_session
 from endpoints import sql_db_only
@@ -21,6 +21,7 @@ from endpoints.get_transactions import (
     AcceptanceMode,
 )
 from helper.utils import add_cache_control
+from models.TransactionAcceptance import TransactionAcceptance
 from models.TxAddrMapping import TxAddrMapping, TxScriptMapping
 from server import app
 
@@ -127,7 +128,7 @@ async def get_full_transactions_for_address_page(
         description="The max number of records to get. "
         "For paging combine with using 'before/after' from oldest previous result. "
         "Use value of X-Next-Page-Before/-After as long as header is present to continue paging. "
-        "The actual number of transactions returned for each page can be > limit.",
+        "The actual number of transactions returned for each page can be != limit.",
         ge=1,
         le=500,
         default=50,
@@ -168,7 +169,7 @@ async def get_full_transactions_for_address_page(
     if before != 0 and after != 0:
         raise HTTPException(status_code=400, detail="Only one of [before, after] can be present")
     elif before != 0:
-        if before <= 1636298787842:  # genesis block_time
+        if before <= GENESIS_MS:
             return []
         if USE_SCRIPT_FOR_ADDRESS:
             query = query.filter(TxScriptMapping.block_time < before).order_by(TxScriptMapping.block_time.desc())
@@ -186,6 +187,16 @@ async def get_full_transactions_for_address_page(
             query = query.order_by(TxScriptMapping.block_time.desc())
         else:
             query = query.order_by(TxAddrMapping.block_time.desc())
+
+    if acceptance == AcceptanceMode.accepted:
+        if USE_SCRIPT_FOR_ADDRESS:
+            query = query.join(
+                TransactionAcceptance, TxScriptMapping.transaction_id == TransactionAcceptance.transaction_id
+            )
+        else:
+            query = query.join(
+                TransactionAcceptance, TxAddrMapping.transaction_id == TransactionAcceptance.transaction_id
+            )
 
     async with async_session() as s:
         tx_within_limit_before = await s.execute(query)
@@ -223,14 +234,58 @@ async def get_full_transactions_for_address_page(
                 )
             tx_ids.update([x for x in tx_with_same_block_time.scalars().all()])
 
-    response.headers["X-Page-Count"] = str(len(tx_ids))
-    if len(tx_ids) >= limit:
+        # Check for more data before/after for pagination purposes
+        if before or after:
+            if USE_SCRIPT_FOR_ADDRESS:
+                has_newer = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxScriptMapping.script_public_key == script)
+                            & (TxScriptMapping.block_time > newest_block_time)
+                        )
+                    )
+                )
+            else:
+                has_newer = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxAddrMapping.address == kaspa_address) & (TxAddrMapping.block_time > newest_block_time)
+                        )
+                    )
+                )
+        else:
+            has_newer = False
+
+        if not after or after >= GENESIS_MS:
+            if USE_SCRIPT_FOR_ADDRESS:
+                has_older = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxScriptMapping.script_public_key == script)
+                            & (TxScriptMapping.block_time < oldest_block_time)
+                        )
+                    )
+                )
+            else:
+                has_older = await s.scalar(
+                    select(
+                        exists().where(
+                            (TxAddrMapping.address == kaspa_address) & (TxAddrMapping.block_time < oldest_block_time)
+                        )
+                    )
+                )
+        else:
+            has_older = False
+
+    if has_newer:
         response.headers["X-Next-Page-After"] = str(newest_block_time)
+    if has_older:
         response.headers["X-Next-Page-Before"] = str(oldest_block_time)
 
     res = await search_for_transactions(
         TxSearch(transactionIds=list(tx_ids), acceptingBlueScores=None), fields, resolve_previous_outpoints, acceptance
     )
+    response.headers["X-Page-Count"] = str(len(res))
     if before:
         add_cache_control(None, before, response)
     elif after and len(tx_ids) >= limit:

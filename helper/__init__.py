@@ -14,20 +14,28 @@ _logger = logging.getLogger(__name__)
 aiocache.logger.setLevel(logging.WARNING)
 
 
-@cached(ttl=120)
+@cached(ttl=60)
 async def get_kas_price():
     market_data = await get_kas_market_data()
     return market_data.get("current_price", {}).get("usd", 0)
 
 
-@cached(ttl=300)
+@cached(ttl=60)
 async def get_kas_market_data():
     global FLOOD_DETECTED
     global CACHE
-    CACHE = {}
     if not FLOOD_DETECTED or time.time() - FLOOD_DETECTED > 300:
-        _logger.debug("Querying CoinGecko now.")
         async with aiohttp.ClientSession() as session:
+            try:
+                _logger.debug("Querying CoinGecko mirror")
+                async with session.get("https://price.kaspa.ws/cg.json", timeout=10) as resp:
+                    if resp.status == 200:
+                        CACHE = (await resp.json())["market_data"]
+                        FLOOD_DETECTED = False
+                        return CACHE
+            except Exception:
+                pass  # Ignore and fall back
+            _logger.info("Mirror failed, querying CoinGecko")
             async with session.get("https://api.coingecko.com/api/v3/coins/kaspa", timeout=10) as resp:
                 if resp.status == 200:
                     FLOOD_DETECTED = False

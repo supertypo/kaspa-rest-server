@@ -2,11 +2,12 @@
 from asyncio import wait_for
 
 from fastapi import HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
+from constants import MAX_SUPPLY_KAS, SOMPI_PER_KAS
 from kaspad.KaspadRpcClient import kaspad_rpc_client
 from server import app, kaspad_client
-from fastapi.responses import PlainTextResponse
 
 
 class CoinSupplyResponse(BaseModel):
@@ -30,7 +31,7 @@ async def get_coinsupply():
 
     return {
         "circulatingSupply": coin_supply["circulatingSompi"],
-        "maxSupply": coin_supply["maxSompi"],
+        "maxSupply": MAX_SUPPLY_KAS * SOMPI_PER_KAS,
     }
 
 
