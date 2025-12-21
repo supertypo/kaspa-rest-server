@@ -113,10 +113,7 @@ async def get_virtual_chain_transactions(
         transaction_ids.append(accepted_tx["transaction_id"])
         accepted_txs_dict[accepted_tx["block_hash"]].append(accepted_tx["transaction_id"])
     del accepted_txs
-    logging.warning(f"TXS: {len(transaction_ids)}")
-    print(type(chain_blocks), len(chain_blocks))
-    print([type(x["hash"]) for x in chain_blocks])
-    print(transaction_ids, [type(x) for x in transaction_ids])
+
     async with async_session() as session:
         tx_list = (
             (
