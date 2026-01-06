@@ -19,6 +19,7 @@ from constants import (
     AN_HOUR_MS,
     REGEX_DATE_OPTIONAL_DAY,
     GENESIS_START_OF_MONTH_MS,
+    CRESCENDO_BS,
 )
 from dbsession import async_session_blocks
 from endpoints.get_virtual_chain_blue_score import get_virtual_selected_parent_blue_score
@@ -41,7 +42,6 @@ class HashrateHistoryResponse(BaseModel):
 
 
 _sample_interval_minutes = 15
-_crescendo_blue_score = 108554145
 
 
 @app.get(
@@ -142,7 +142,7 @@ def filter_samples(samples: list[HashrateHistory], sample_interval: int) -> list
         last = chunk[0]
         # If sampling and crossing the crescendo activation, we must create one sample before and one after
         # Otherwise there will be artifacts produced in the graph due to the sudden reduction in difficulty
-        if first.blue_score < _crescendo_blue_score <= last.blue_score:
+        if first.blue_score < CRESCENDO_BS <= last.blue_score:
             difficulty = int(bits_to_difficulty(first.bits))
             hashrate_kh = difficulty * 2 // 1_000
             samples_filtered.append(hashrate_history(first, None, difficulty, hashrate_kh))
@@ -152,7 +152,7 @@ def filter_samples(samples: list[HashrateHistory], sample_interval: int) -> list
         else:
             bits = last.bits if sample_interval == 1 else None
             difficulty = int(sum(bits_to_difficulty(s.bits) for s in chunk) / len(chunk))
-            hashrate_kh = difficulty * 2 * (1 if last.blue_score < _crescendo_blue_score else 10) // 1_000
+            hashrate_kh = difficulty * 2 * (1 if last.blue_score < CRESCENDO_BS else 10) // 1_000
             samples_filtered.append(hashrate_history(last, bits, difficulty, hashrate_kh))
     return samples_filtered
 
@@ -234,7 +234,7 @@ async def update_hashrate_history():
         try:
             result = await s.execute(select(func.max(HashrateHistory.blue_score)))
             max_blue_score = result.scalar_one_or_none() or 0
-            bps = 1 if max_blue_score < _crescendo_blue_score else 10  # Crescendo
+            bps = 1 if max_blue_score < CRESCENDO_BS else 10  # Crescendo
             next_blue_score = 0
             if max_blue_score > 0:
                 next_blue_score = max_blue_score + (bps * 60 * _sample_interval_minutes)
@@ -275,7 +275,7 @@ async def update_hashrate_history():
                             f"Sampled: daa={block.daa_score}, blue_score={block.blue_score}, timestamp={t}, bits={block.bits}"
                         )
                 block = blocks[0]
-                bps = 1 if block.blue_score < _crescendo_blue_score else 10
+                bps = 1 if block.blue_score < CRESCENDO_BS else 10
                 next_blue_score = block.blue_score + (bps * 60 * _sample_interval_minutes)
             if batch:
                 s.add_all(batch)

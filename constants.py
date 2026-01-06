@@ -18,32 +18,41 @@ NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = int(os.getenv("BPS", "10"))
 
 SOMPI_PER_KAS = 100_000_000
+
 MAINNET_MAX_SUPPLY_KAS = 28_704_035_605
 DEFAULT_MAX_SUPPLY_KAS = 29_000_000_000
+
+MAINNET_CRESCENDO_BS = 108_554_145
+DEFAULT_CRESCENDO_BS = 0
 
 match NETWORK_TYPE:
     case "mainnet":
         address_prefix = "kaspa"
         address_example = "kaspa:qqkqkzjvr7zwxxmjxjkmxxdwju9kjs6e9u82uh59z07vgaks6gg62v8707g73"
         max_supply = MAINNET_MAX_SUPPLY_KAS
+        crescendo_bs = MAINNET_CRESCENDO_BS
     case "testnet":
         address_prefix = "kaspatest"
         address_example = "kaspatest:qpqz2vxj23kvh0m73ta2jjn2u4cv4tlufqns2eap8mxyyt0rvrxy6ejkful67"
         max_supply = DEFAULT_MAX_SUPPLY_KAS
+        crescendo_bs = DEFAULT_CRESCENDO_BS
     case "simnet":
         address_prefix = "kaspasim"
         address_example = "kaspasim:qpqz2vxj23kvh0m73ta2jjn2u4cv4tlufqns2eap8mxyyt0rvrxy6ejkful67"
         max_supply = DEFAULT_MAX_SUPPLY_KAS
+        crescendo_bs = DEFAULT_CRESCENDO_BS
     case "devnet":
         address_prefix = "kaspadev"
         address_example = "kaspadev:qpqz2vxj23kvh0m73ta2jjn2u4cv4tlufqns2eap8mxyyt0rvrxy6ejkful67"
         max_supply = DEFAULT_MAX_SUPPLY_KAS
+        crescendo_bs = DEFAULT_CRESCENDO_BS
     case _:
         raise ValueError(f"Network type {NETWORK_TYPE} not supported.")
 
 ADDRESS_PREFIX = address_prefix
 ADDRESS_EXAMPLE = address_example
 MAX_SUPPLY_KAS = max_supply
+CRESCENDO_BS = crescendo_bs
 
 REGEX_KASPA_ADDRESS = "^" + ADDRESS_PREFIX + ":[a-z0-9]{61,63}$"
 
