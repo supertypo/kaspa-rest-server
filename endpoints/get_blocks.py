@@ -2,7 +2,7 @@
 import logging
 import os
 from asyncio import wait_for
-from typing import List
+from typing import List, Optional
 
 from fastapi import Query, Path, HTTPException
 from fastapi import Response
@@ -197,13 +197,54 @@ async def get_blocks(
 
 
 @app.get("/blocks-from-bluescore", response_model=List[BlockModel], tags=["Kaspa blocks"])
-async def get_blocks_from_bluescore(response: Response, blueScore: int = 43679173, includeTransactions: bool = False):
+async def get_blocks_from_bluescore(
+    response: Response,
+    blueScore: Optional[int] = Query(None),
+    blue_score_gte: Optional[int] = Query(None, alias="blueScoreGte"),
+    blue_score_lt: Optional[int] = Query(None, alias="blueScoreLt"),
+    includeTransactions: bool = Query(False, alias="includeTransactions"),
+):
     """
-    Lists blocks of a given blueScore
+    Lists blocks based on blueScore. Exactly one of blueScore, blueScoreGte, or blueScoreLt must be provided.
     """
     response.headers["X-Data-Source"] = "Database"
 
-    if blueScore < 0 or current_blue_score_data["blue_score"] and current_blue_score_data["blue_score"] - blueScore < 0:
+    if sum(x is not None for x in (blueScore, blue_score_gte, blue_score_lt)) != 1:
+        raise HTTPException(400, "Exactly one of blueScore, blueScoreGte, or blueScoreLt must be provided")
+
+    current_blue_score = current_blue_score_data.get("blue_score")
+    if current_blue_score is None:
+        return []
+    if blueScore is not None and (blueScore < 0 or blueScore > current_blue_score):
+        return []
+    if blue_score_gte is not None and blue_score_gte > current_blue_score:
+        return []
+    if blue_score_lt is not None and blue_score_lt < 0:
+        return []
+
+    if blue_score_gte is not None:
+        async with async_session_blocks() as s:
+            blueScore = (
+                await s.execute(
+                    select(Block.blue_score)
+                    .where(Block.blue_score >= blue_score_gte)
+                    .order_by(Block.blue_score.asc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
+    if blue_score_lt is not None:
+        async with async_session_blocks() as s:
+            blueScore = (
+                await s.execute(
+                    select(Block.blue_score)
+                    .where(Block.blue_score < blue_score_lt)
+                    .order_by(Block.blue_score.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
+    if blueScore is None:
         return []
 
     add_cache_control(blueScore, None, response)
