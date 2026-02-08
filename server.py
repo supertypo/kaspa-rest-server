@@ -5,6 +5,7 @@ import os
 from asyncio import wait_for
 from typing import Optional
 
+import http_client
 import fastapi.logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -134,6 +135,8 @@ if not kaspad_hosts and not KASPAD_WRPC_URL:
 
 kaspad_client = KaspadMultiClient(kaspad_hosts)
 
+http_client.setup_lifecycle(app)
+
 
 @app.exception_handler(Exception)
 async def unicorn_exception_handler(request: Request, exc: Exception):
@@ -148,7 +151,7 @@ async def unicorn_exception_handler(request: Request, exc: Exception):
 
 
 @app.on_event("startup")
-async def periodical_blockdag():
+async def startup():
     async def loop():
         while True:
             try:

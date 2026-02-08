@@ -14,6 +14,9 @@ ADDRESSES_ACTIVE_COUNT = os.getenv("ADDRESSES_ACTIVE_COUNT", "false").lower() ==
 HASHRATE_HISTORY = os.getenv("HASHRATE_HISTORY", "false").lower() == "true"
 ADDRESS_RANKINGS = os.getenv("ADDRESS_RANKINGS", "false").lower() == "true"
 
+INDEXER_BLOCKS_URL = os.getenv("INDEXER_BLOCKS_URL", "")
+INDEXER_BLOCKS_TTL = int(os.getenv("INDEXER_BLOCKS_TTL", "0"))
+
 NETWORK_TYPE = os.getenv("NETWORK_TYPE", "mainnet").lower()
 BPS = int(os.getenv("BPS", "10"))
 

@@ -9,7 +9,7 @@ from fastapi import Response
 from pydantic import BaseModel
 from sqlalchemy import select, exists, func
 
-from constants import BPS
+from constants import BPS, INDEXER_BLOCKS_TTL, INDEXER_BLOCKS_URL
 from dbsession import async_session, async_session_blocks
 from endpoints.get_virtual_chain_blue_score import current_blue_score_data
 from helper.difficulty_calculation import bits_to_difficulty
@@ -24,6 +24,7 @@ from models.Transaction import Transaction
 
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
+import http_client
 
 _logger = logging.getLogger(__name__)
 
@@ -245,9 +246,17 @@ async def get_blocks_from_bluescore(
             ).scalar_one_or_none()
 
     if blueScore is None:
+        add_cache_control(blue_score_gte if blue_score_gte is not None else blue_score_lt, None, response)
         return []
 
     add_cache_control(blueScore, None, response)
+
+    if (
+        INDEXER_BLOCKS_URL
+        and current_blue_score_data["blue_score"]
+        and ((current_blue_score_data["blue_score"] - blueScore) / BPS < INDEXER_BLOCKS_TTL)
+    ):
+        return await get_blocks_from_indexer(blueScore, includeTransactions, False)
 
     # If the blue score is not older than 1 day, try looking up hashes and finding the blocks in kaspad first
     if (current_blue_score_data["blue_score"] and current_blue_score_data["blue_score"] - blueScore) / BPS < 86400:
@@ -277,6 +286,44 @@ async def get_blocks_from_bluescore(
         result.append(map_block_from_db(block, is_chain_block, parents, children, transaction_ids, transactions))
 
     return result
+
+
+async def get_blocks_from_indexer(blue_score: int, include_transactions: bool = False, include_color: bool = False):
+    """
+    Retrieve blocks from the indexer REST service for a given blueScore.
+    Returns a list of block objects or an empty list if the request fails.
+    """
+    if not INDEXER_BLOCKS_URL or INDEXER_BLOCKS_TTL == 0:
+        return []
+    if http_client.http_session is None:
+        _logger.warning("Indexer API http_session is not available")
+        return []
+
+    try:
+        params = {"blueScore": blue_score}
+        async with http_client.http_session.get(INDEXER_BLOCKS_URL, params=params) as resp:
+            if resp.status == 200:
+                blocks = await resp.json()
+                _logger.debug(f"Retrieved {len(blocks)} blocks from indexer for blueScore {blue_score}")
+
+                result = []
+                for block in blocks:
+                    block = convert_to_legacy_block(block)
+                    if not include_transactions:
+                        block["transactions"] = []
+                    block["extra"] = {}
+                    if include_color:
+                        if block["verboseData"]["isChainBlock"]:
+                            block["extra"]["color"] = "blue"
+                        else:
+                            block["extra"]["color"] = await get_block_color_from_kaspad(block["verboseData"]["hash"])
+                    result.append(block)
+                return result
+            else:
+                _logger.warning(f"Indexer returned status {resp.status} for blueScore {blue_score}")
+    except Exception as e:
+        _logger.error(f"Error fetching blocks from indexer: {e}")
+    return []
 
 
 async def get_block_from_kaspad(block_hash, include_transactions, include_color):
