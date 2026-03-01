@@ -28,7 +28,6 @@ from endpoints.get_hashrate import (
     get_hashrate,
 )
 from endpoints.get_hashrate_history import (
-    update_hashrate_history,
     create_hashrate_history_table,
     get_hashrate_history,
 )
@@ -52,11 +51,13 @@ IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 
 print(
     f"Loaded: {get_balance} {get_utxos} {get_blocks} {get_blockdag} {get_circulating_supply} {get_distribution_tiers}"
-    f"{get_kaspad_info} {get_fee_estimate} {get_marketcap} {get_hashrate} {get_blockreward} {get_halving} {get_hashrate_history}"
+    f"{get_kaspad_info} {get_fee_estimate} {get_marketcap} {get_blockreward} {get_halving} {get_hashrate_history} {get_hashrate}"
     f"{health_state} {get_transaction} {get_virtual_chain_transactions} {get_full_transactions_for_address_page}"
     f"{get_virtual_selected_parent_blue_score} {get_addresses_active} {get_addresses_names} {get_addresses_top}"
     f"{submit_a_new_transaction} {calculate_transaction_mass} {get_price} {get_balances_from_kaspa_addresses}"
     f"{get_transaction_count_for_address} {get_transaction_count_for_day} {get_addresses_active_count_totals}"
+    f"{submit_a_new_transaction} {get_price} {get_balances_from_kaspa_addresses} {calculate_transaction_mass}"
+    f"{get_transaction_count_for_address}"
 )
 
 if os.getenv("VSPC_REQUEST") == "true":
@@ -67,20 +68,13 @@ if os.getenv("VSPC_REQUEST") == "true":
 
 @app.on_event("startup")
 async def startup():
-    # We don't want to mess with the new filler's views!
-    # create db if needed
-    # if False and IS_SQL_DB_CONFIGURED:
-    #     await create_all(drop=False)
-    # get kaspad
     await get_kas_market_data()
 
-    # find kaspad before staring webserver
     await kaspad_client.initialize_all()
     await kaspad_rpc_client()
 
     try:
         await create_hashrate_history_table()
-        await update_hashrate_history()
     except Exception:
         pass
 

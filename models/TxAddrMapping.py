@@ -3,8 +3,8 @@ from sqlalchemy import Column, BigInteger
 
 from constants import ADDRESS_PREFIX
 from dbsession import Base
-from models.type_decorators.HexColumn import HexColumn
 from models.AddressColumn import AddressColumn
+from models.type_decorators.HexColumn import HexColumn
 
 
 class TxAddrMapping(Base):

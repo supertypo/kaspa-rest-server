@@ -1,9 +1,9 @@
 # encoding: utf-8
+import asyncio
 import logging
 from asyncio import wait_for
 
 from fastapi import HTTPException
-from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
 
 from kaspad.KaspadRpcClient import kaspad_rpc_client
@@ -33,9 +33,17 @@ async def get_virtual_selected_parent_blue_score():
 
 
 @app.on_event("startup")
-@repeat_every(seconds=5)
 async def update_blue_score():
     global current_blue_score_data
-    blue_score = await get_virtual_selected_parent_blue_score()
-    current_blue_score_data["blue_score"] = int(blue_score["blueScore"])
-    logging.debug(f"Updated current_blue_score: {current_blue_score_data['blue_score']}")
+
+    async def loop():
+        while True:
+            try:
+                blue_score = await get_virtual_selected_parent_blue_score()
+                current_blue_score_data["blue_score"] = int(blue_score["blueScore"])
+                logging.debug(f"Updated current_blue_score: {current_blue_score_data['blue_score']}")
+            except Exception as e:
+                logging.exception(f"Error updating blue score: {e}")
+            await asyncio.sleep(5)
+
+    asyncio.create_task(loop())

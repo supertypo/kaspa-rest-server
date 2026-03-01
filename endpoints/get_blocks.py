@@ -2,7 +2,7 @@
 import logging
 import os
 from asyncio import wait_for
-from typing import List
+from typing import List, Optional
 
 from fastapi import Query, Path, HTTPException
 from fastapi import Response
@@ -20,7 +20,8 @@ from models.Block import Block
 from models.BlockParent import BlockParent
 from models.BlockTransaction import BlockTransaction
 from models.Subnetwork import Subnetwork
-from models.Transaction import TransactionOutput, TransactionInput, Transaction
+from models.Transaction import Transaction
+
 from models.TransactionAcceptance import TransactionAcceptance
 from server import app, kaspad_client
 
@@ -196,13 +197,54 @@ async def get_blocks(
 
 
 @app.get("/blocks-from-bluescore", response_model=List[BlockModel], tags=["Kaspa blocks"])
-async def get_blocks_from_bluescore(response: Response, blueScore: int = 43679173, includeTransactions: bool = False):
+async def get_blocks_from_bluescore(
+    response: Response,
+    blueScore: Optional[int] = Query(None),
+    blue_score_gte: Optional[int] = Query(None, alias="blueScoreGte"),
+    blue_score_lt: Optional[int] = Query(None, alias="blueScoreLt"),
+    includeTransactions: bool = Query(False, alias="includeTransactions"),
+):
     """
-    Lists blocks of a given blueScore
+    Lists blocks based on blueScore. Exactly one of blueScore, blueScoreGte, or blueScoreLt must be provided.
     """
     response.headers["X-Data-Source"] = "Database"
 
-    if blueScore < 0 or current_blue_score_data["blue_score"] and current_blue_score_data["blue_score"] - blueScore < 0:
+    if sum(x is not None for x in (blueScore, blue_score_gte, blue_score_lt)) != 1:
+        raise HTTPException(400, "Exactly one of blueScore, blueScoreGte, or blueScoreLt must be provided")
+
+    current_blue_score = current_blue_score_data.get("blue_score")
+    if current_blue_score is None:
+        return []
+    if blueScore is not None and (blueScore < 0 or blueScore > current_blue_score):
+        return []
+    if blue_score_gte is not None and blue_score_gte > current_blue_score:
+        return []
+    if blue_score_lt is not None and blue_score_lt < 0:
+        return []
+
+    if blue_score_gte is not None:
+        async with async_session_blocks() as s:
+            blueScore = (
+                await s.execute(
+                    select(Block.blue_score)
+                    .where(Block.blue_score >= blue_score_gte)
+                    .order_by(Block.blue_score.asc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
+    if blue_score_lt is not None:
+        async with async_session_blocks() as s:
+            blueScore = (
+                await s.execute(
+                    select(Block.blue_score)
+                    .where(Block.blue_score < blue_score_lt)
+                    .order_by(Block.blue_score.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
+    if blueScore is None:
         return []
 
     add_cache_control(blueScore, None, response)
@@ -389,30 +431,6 @@ async def get_transactions(blockId, transactionIds):
             )
         ).all()
 
-        tx_outputs = (
-            (
-                await s.execute(
-                    select(TransactionOutput)
-                    .where(TransactionOutput.transaction_id.in_(transactionIds))
-                    .order_by(TransactionOutput.index)
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-        tx_inputs = (
-            (
-                await s.execute(
-                    select(TransactionInput)
-                    .where(TransactionInput.transaction_id.in_(transactionIds))
-                    .order_by(TransactionInput.index)
-                )
-            )
-            .scalars()
-            .all()
-        )
-
     tx_list = []
     for tx, sub in transactions:
         tx_list.append(
@@ -426,8 +444,7 @@ async def get_transactions(blockId, transactionIds):
                         "signatureScript": tx_inp.signature_script,
                         "sigOpCount": tx_inp.sig_op_count,
                     }
-                    for tx_inp in tx_inputs
-                    if tx_inp.transaction_id == tx.transaction_id
+                    for tx_inp in (tx.inputs or [])
                 ],
                 "outputs": [
                     {
@@ -438,8 +455,7 @@ async def get_transactions(blockId, transactionIds):
                             "scriptPublicKeyAddress": tx_out.script_public_key_address,
                         },
                     }
-                    for tx_out in tx_outputs
-                    if tx_out.transaction_id == tx.transaction_id
+                    for tx_out in (tx.outputs or [])
                 ],
                 "subnetworkId": sub.subnetwork_id,
                 "payload": tx.payload,

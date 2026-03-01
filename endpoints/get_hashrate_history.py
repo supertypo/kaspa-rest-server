@@ -1,4 +1,5 @@
 # encoding: utf-8
+import asyncio
 import calendar
 import logging
 from datetime import datetime, timezone
@@ -6,7 +7,6 @@ from typing import Optional
 
 from fastapi import HTTPException
 from fastapi.params import Query
-from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
 from sqlalchemy import select, text, func
 from starlette.responses import Response
@@ -218,7 +218,19 @@ async def create_hashrate_history_table():
             await release_hashrate_history_lock(s)
 
 
-@repeat_every(seconds=600)
+@app.on_event("startup")
+async def periodical_update_hashrate_history():
+    async def loop():
+        while True:
+            try:
+                await update_hashrate_history()
+            except Exception as e:
+                logging.exception(f"Failed to update hashrate history: {e}")
+            await asyncio.sleep(300)
+
+    asyncio.create_task(loop())
+
+
 async def update_hashrate_history():
     batch_size = 1000
 

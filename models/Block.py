@@ -1,9 +1,9 @@
 from sqlalchemy import Column, BigInteger, SmallInteger
 
 from dbsession import Base
-from models.type_decorators.HexColumn import HexColumn
-from models.type_decorators.HexArrayColumn import HexArrayColumn
 from models.type_decorators.ByteColumn import ByteColumn
+from models.type_decorators.HexArrayColumn import HexArrayColumn
+from models.type_decorators.HexColumn import HexColumn
 
 
 class Block(Base):

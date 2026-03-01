@@ -1,4 +1,5 @@
 # encoding: utf-8
+import asyncio
 import logging
 import os
 from asyncio import wait_for
@@ -8,8 +9,8 @@ import fastapi.logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi_utils.tasks import repeat_every
 from pydantic import BaseModel
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -109,7 +110,7 @@ async def ping_server():
     if os.getenv("SQL_URI") is not None:
         async with async_session() as session:
             try:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
                 result.database.is_online = True
             except Exception as err:
                 _logger.error("Database health check failed %s", err)
@@ -147,6 +148,13 @@ async def unicorn_exception_handler(request: Request, exc: Exception):
 
 
 @app.on_event("startup")
-@repeat_every(seconds=60)
 async def periodical_blockdag():
-    await kaspad_client.initialize_all()
+    async def loop():
+        while True:
+            try:
+                await kaspad_client.initialize_all()
+            except Exception as e:
+                logging.exception(f"Error initializing kaspad_client: {e}")
+            await asyncio.sleep(60)
+
+    asyncio.create_task(loop())

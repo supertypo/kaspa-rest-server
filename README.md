@@ -17,7 +17,7 @@ Then:
 poetry install --no-root --no-interaction
 export DEBUG=true
 export KASPAD_HOST_1=localhost:16110
-export SQL_URI=postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+export SQL_URI=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
 poetry run gunicorn -b 0.0.0.0:8000 -w 4 -k uvicorn.workers.UvicornWorker main:app
 ```
 
@@ -25,7 +25,7 @@ poetry run gunicorn -b 0.0.0.0:8000 -w 4 -k uvicorn.workers.UvicornWorker main:a
 
 * KASPAD_WRPC_URL - ws(s)://host:port (wrpc) to a kaspa node, use 'resolver' to use the Kaspa PNN. (default: none)
 * KASPAD_HOST1 - host:port (grpc) to a kaspa node, multiple nodes is supported. (default: none)
-* SQL_URI - uri to a postgres db (default: postgresql+asyncpg://127.0.0.1:5432)
+* SQL_URI - uri to a postgres db (default: postgresql+psycopg://127.0.0.1:5432)
 * SQL_URI_BLOCKS - uri to a postgres db to query for blocks, block_parent and blocks_transactions (default: SQL_URI)
 * SQL_POOL_SIZE - postgres db pool size (default: 15)
 * SQL_POOL_MAX_OVERFLOW - postgres db pool max overflow (default: 0)
