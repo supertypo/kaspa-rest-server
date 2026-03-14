@@ -69,6 +69,7 @@ class TxModel(BaseModel):
     payload: str | None
     block_hash: List[str] | None
     block_time: int | None
+    version: int | None
     is_accepted: bool | None
     accepting_block_hash: str | None
     accepting_block_blue_score: int | None
@@ -171,6 +172,7 @@ async def get_transaction(
                         "payload": tx.Transaction.payload,
                         "block_hash": block_hashes,
                         "block_time": tx.Transaction.block_time,
+                        "version": tx.Transaction.version or 0,
                         "inputs": [vars(i) for i in tx.Transaction.inputs]
                         if tx.Transaction.inputs and inputs
                         else None,
@@ -347,6 +349,7 @@ async def search_for_transactions(
                 "payload": tx.Transaction.payload,
                 "block_hash": tx_blocks.get(tx.Transaction.transaction_id),
                 "block_time": tx.Transaction.block_time,
+                "version": tx.Transaction.version or 0,
                 "is_accepted": True if tx.accepted_transaction_id else False,
                 "accepting_block_hash": tx.accepting_block_hash,
                 "accepting_block_blue_score": accepting_block_blue_score,
@@ -524,6 +527,7 @@ def map_transaction_from_kaspad(block, transaction_id, block_hashes, include_inp
                     "payload": tx["payload"] if tx["payload"] else None,
                     "block_hash": block_hashes,
                     "block_time": tx["verboseData"]["blockTime"],
+                    "version": tx["version"],
                     "inputs": [
                         {
                             "transaction_id": tx["verboseData"]["transactionId"],

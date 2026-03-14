@@ -469,7 +469,7 @@ async def get_transactions(blockId, transactionIds):
                     "blockTime": tx.block_time,
                 },
                 "mass": tx.mass,
-                "version": 0,
+                "version": tx.version or 0,
             }
         )
     return tx_list

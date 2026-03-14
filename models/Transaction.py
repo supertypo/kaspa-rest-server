@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, ARRAY
+from sqlalchemy import Column, Integer, BigInteger, ARRAY, SmallInteger
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql.type_api import UserDefinedType
 
@@ -25,6 +25,7 @@ class Transaction(Base):
     mass = Column(Integer)
     payload = Column(HexColumn)
     block_time = Column(BigInteger)
+    version = Column(SmallInteger)
     _inputs = Column("inputs", ARRAY(TransactionInputType))
     _outputs = Column("outputs", ARRAY(TransactionOutputType))
 
