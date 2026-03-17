@@ -1,5 +1,4 @@
 # encoding: utf-8
-import asyncio
 import calendar
 import logging
 from datetime import datetime, timezone
@@ -8,7 +7,7 @@ from typing import Optional
 from fastapi import HTTPException
 from fastapi.params import Query
 from pydantic import BaseModel
-from sqlalchemy import select, text, func
+from sqlalchemy import select
 from starlette.responses import Response
 
 from fastapi import Path
@@ -22,9 +21,7 @@ from constants import (
     CRESCENDO_BS,
 )
 from dbsession import async_session_blocks
-from endpoints.get_virtual_chain_blue_score import get_virtual_selected_parent_blue_score
 from helper.difficulty_calculation import bits_to_difficulty
-from models.Block import Block
 from models.HashrateHistory import HashrateHistory
 from server import app
 
@@ -169,149 +166,3 @@ def hashrate_history(sample, bits, difficulty, hashrate_kh):
         "difficulty": difficulty,
         "hashrate_kh": hashrate_kh,
     }
-
-
-async def create_hashrate_history_table():
-    if not HASHRATE_HISTORY:
-        _logger.debug("Hashrate history: Disabled. Skipping table creation")
-        return
-
-    async with async_session_blocks() as s:
-        await acquire_hashrate_history_lock(s)
-        try:
-            check_table_exists_sql = text(f"""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' AND table_name = '{HashrateHistory.__tablename__}'
-                );
-            """)
-            result = await s.execute(check_table_exists_sql)
-            if result.scalar():
-                _logger.debug("Hashrate history: Table already exists")
-                return
-
-            _logger.warning("Hashrate history table does not exist, attempting to create it")
-            create_table_sql = f"""
-                CREATE TABLE IF NOT EXISTS {HashrateHistory.__tablename__} (
-                    daa_score BIGINT PRIMARY KEY,
-                    blue_score BIGINT,
-                    timestamp BIGINT,
-                    bits BIGINT
-                );
-            """
-            await s.execute(text(create_table_sql))
-            create_index_sql = f"""
-                CREATE INDEX IF NOT EXISTS {HashrateHistory.__tablename__}_blue_score_idx ON {HashrateHistory.__tablename__} (blue_score);
-            """
-            await s.execute(text(create_index_sql))
-            create_index_sql = f"""
-                CREATE INDEX IF NOT EXISTS {HashrateHistory.__tablename__}_timestamp_idx ON {HashrateHistory.__tablename__} (timestamp);
-            """
-            await s.execute(text(create_index_sql))
-            await s.commit()
-        except Exception as e:
-            _logger.exception(e)
-            _logger.error(
-                f"Hashrate history: Failed to create table, create it manually: \n{create_table_sql}{create_index_sql}"
-            )
-        finally:
-            await release_hashrate_history_lock(s)
-
-
-@app.on_event("startup")
-async def periodical_update_hashrate_history():
-    async def loop():
-        while True:
-            try:
-                await update_hashrate_history()
-            except Exception as e:
-                logging.exception(f"Failed to update hashrate history: {e}")
-            await asyncio.sleep(300)
-
-    asyncio.create_task(loop())
-
-
-async def update_hashrate_history():
-    batch_size = 1000
-
-    if not HASHRATE_HISTORY:
-        _logger.debug("Hashrate history: Disabled. Skipping update")
-        return
-
-    _logger.info("Hashrate history: Sampling hashrate history")
-    sample_count = 0
-    batch = []
-    async with async_session_blocks() as s:
-        await acquire_hashrate_history_lock(s)
-        try:
-            result = await s.execute(select(func.max(HashrateHistory.blue_score)))
-            max_blue_score = result.scalar_one_or_none() or 0
-            bps = 1 if max_blue_score < CRESCENDO_BS else 10  # Crescendo
-            next_blue_score = 0
-            if max_blue_score > 0:
-                next_blue_score = max_blue_score + (bps * 60 * _sample_interval_minutes)
-
-            current_blue_score = await get_virtual_selected_parent_blue_score()
-            while int(current_blue_score["blueScore"]) > next_blue_score:
-                result = await s.execute(
-                    select(Block)
-                    .where(Block.blue_score > next_blue_score)
-                    .order_by(Block.blue_score, Block.daa_score)
-                    .limit(1 if next_blue_score > 1236000 else 2)  # blue_score was reset 2021-11-22
-                )
-                blocks = result.scalars().all()
-                if not blocks:
-                    break
-                if len(blocks) == 2:
-                    if abs(blocks[0].daa_score - blocks[1].daa_score) < 100_000:
-                        blocks = [blocks[0]]  # keep both only if they are on different sides of the reset
-                for block in blocks:
-                    if block.blue_score and block.daa_score and block.timestamp and block.bits:
-                        batch.append(
-                            HashrateHistory(
-                                blue_score=block.blue_score,
-                                daa_score=block.daa_score,
-                                timestamp=block.timestamp,
-                                bits=block.bits,
-                            )
-                        )
-                        if len(batch) >= batch_size:
-                            s.add_all(batch)
-                            await s.commit()
-                            batch.clear()
-                        sample_count += 1
-                        t = datetime.fromtimestamp(block.timestamp / 1000, tz=timezone.utc).isoformat(
-                            timespec="seconds"
-                        )
-                        _logger.info(
-                            f"Sampled: daa={block.daa_score}, blue_score={block.blue_score}, timestamp={t}, bits={block.bits}"
-                        )
-                block = blocks[0]
-                bps = 1 if block.blue_score < CRESCENDO_BS else 10
-                next_blue_score = block.blue_score + (bps * 60 * _sample_interval_minutes)
-            if batch:
-                s.add_all(batch)
-                await s.commit()
-        except Exception as e:
-            _logger.exception(e)
-            _logger.error("Hashrate history: Sampling failed")
-        finally:
-            await release_hashrate_history_lock(s)
-    _logger.info(f"Hashrate history: Sampling complete, {sample_count} samples committed")
-
-
-async def acquire_hashrate_history_lock(s):
-    try:
-        result = await s.execute(text("SELECT pg_try_advisory_lock(123100)"))
-        if not result.scalar():
-            _logger.debug("Hashrate history: waiting for advisory lock")
-            await s.execute(text("SELECT pg_advisory_lock(123100)"))
-        _logger.debug("Hashrate history: Acquired advisory lock (123100)")
-    except Exception as e:
-        _logger.exception(e)
-        _logger.error("Hashrate history: unable to acquire advisory lock (123100)")
-        raise e
-
-
-async def release_hashrate_history_lock(s):
-    await s.execute(text("SELECT pg_advisory_unlock(123100)"))

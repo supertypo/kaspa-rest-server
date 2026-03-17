@@ -28,7 +28,6 @@ from endpoints.get_hashrate import (
     get_hashrate,
 )
 from endpoints.get_hashrate_history import (
-    create_hashrate_history_table,
     get_hashrate_history,
 )
 from endpoints.get_health import health_state
@@ -72,11 +71,6 @@ async def startup():
 
     await kaspad_client.initialize_all()
     await kaspad_rpc_client()
-
-    try:
-        await create_hashrate_history_table()
-    except Exception:
-        pass
 
 
 @app.get("/", include_in_schema=False)
