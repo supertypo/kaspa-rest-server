@@ -41,6 +41,6 @@ poetry run gunicorn -b 0.0.0.0:8000 -w 4 -k uvicorn.workers.UvicornWorker main:a
 * VSPC_REQUEST - If true enables /info/get-vscp-from-block (default: false)
 * TRANSACTION_COUNT - If true (a prepopulated) transactions_counts table will be used to provide /transactions/count/{day_or_month} (default: false)
 * ADDRESSES_ACTIVE_COUNT - If true (a prepopulated) scripts_active_counts table will be used to provide /addresses/active/count/{day_or_month} (default: false)
-* HASHRATE_HISTORY - If true populates hashrate_history table and enables /info/hashrate/history (default: false)
+* HASHRATE_HISTORY - If true (a prepopulated) hashrate_history table will be used to provide /info/hashrate/history (default: false)
 * ADDRESS_RANKINGS - If true enables /addresses/top,distribution. Requires UTXO exporter. (default: false)
 * DEBUG - Enables additional logging (default: false)
