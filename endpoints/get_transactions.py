@@ -356,7 +356,7 @@ async def search_for_transactions(
                 "accepting_block_time": accepting_block_time,
                 "inputs": tx_inputs.get(tx.Transaction.transaction_id) if not fields or "inputs" in fields else None,
                 "outputs": [vars(o) for o in tx.Transaction.outputs]
-                if tx.Transaction.outputs and not fields or "outputs" in fields
+                if tx.Transaction.outputs and (not fields or "outputs" in fields)
                 else None,
             },
             fields,
