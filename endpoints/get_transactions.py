@@ -428,11 +428,7 @@ async def get_tx_blocks_from_db(fields, transaction_ids):
 
 
 async def resolve_inputs_from_db(inputs, resolve_previous_outpoints, prev_out_resolved=PREV_OUT_RESOLVED):
-    if inputs and (
-        resolve_previous_outpoints == PreviousOutpointLookupMode.light
-        and not prev_out_resolved
-        or resolve_previous_outpoints == PreviousOutpointLookupMode.full
-    ):
+    if inputs and not prev_out_resolved and resolve_previous_outpoints != PreviousOutpointLookupMode.no:
         tx_ids, tx_indices, prev_hashes, prev_indices = zip(
             *[
                 (
@@ -496,6 +492,16 @@ async def resolve_inputs_from_db(inputs, resolve_previous_outpoints, prev_out_re
                             "script_public_key_address": previous_outpoint_address,
                             "script_public_key_type": get_public_key_type(previous_outpoint_script),
                         }
+    elif resolve_previous_outpoints == PreviousOutpointLookupMode.full:
+        for i in inputs:
+            i["previous_outpoint_resolved"] = {
+                "transaction_id": i["previous_outpoint_hash"],
+                "index": i["previous_outpoint_index"],
+                "amount": i["previous_outpoint_amount"],
+                "script_public_key": i["previous_outpoint_script"],
+                "script_public_key_address": i["previous_outpoint_address"],
+                "script_public_key_type": get_public_key_type(i["previous_outpoint_script"]),
+            }
     elif resolve_previous_outpoints == PreviousOutpointLookupMode.no:
         for i in inputs:  # Clear any pre-resolved for consistency
             i["previous_outpoint_amount"] = None
