@@ -494,13 +494,16 @@ async def resolve_inputs_from_db(inputs, resolve_previous_outpoints, prev_out_re
                         }
     elif resolve_previous_outpoints == PreviousOutpointLookupMode.full:
         for i in inputs:
+            script = i.get("previous_outpoint_script")
+            if script is None:
+                continue
             i["previous_outpoint_resolved"] = {
-                "transaction_id": i["previous_outpoint_hash"],
-                "index": i["previous_outpoint_index"],
-                "amount": i["previous_outpoint_amount"],
-                "script_public_key": i["previous_outpoint_script"],
-                "script_public_key_address": i["previous_outpoint_address"],
-                "script_public_key_type": get_public_key_type(i["previous_outpoint_script"]),
+                "transaction_id": i.get("previous_outpoint_hash"),
+                "index": i.get("previous_outpoint_index"),
+                "amount": i.get("previous_outpoint_amount"),
+                "script_public_key": script,
+                "script_public_key_address": i.get("previous_outpoint_address"),
+                "script_public_key_type": get_public_key_type(script),
             }
     elif resolve_previous_outpoints == PreviousOutpointLookupMode.no:
         for i in inputs:  # Clear any pre-resolved for consistency
