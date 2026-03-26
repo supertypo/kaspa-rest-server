@@ -66,7 +66,7 @@ async def get_utxos_for_address(
     """
     Lists all open utxo for a given kaspa address.
 
-    Returns HTTP 413 if the address holds too many UTXOs.
+    Returns an empty list if the address holds too many UTXOs.
     """
     try:
         to_script(kaspaAddress)
@@ -76,10 +76,8 @@ async def get_utxos_for_address(
     over_limit = await _get_over_limit_addresses([kaspaAddress])
     if over_limit:
         _logger.info("UTXO count over limit for address: %s", kaspaAddress)
-        raise HTTPException(
-            status_code=413,
-            detail=f"Address UTXO count exceeds the limit of {SCRIPTS_UTXOS_LIMIT}",
-        )
+        response.headers["Cache-Control"] = "public, max-age=60"
+        return []
 
     utxos = await get_utxos([kaspaAddress])
 
@@ -87,15 +85,7 @@ async def get_utxos_for_address(
     if utxo_count > 1_000:
         _logger.info("High UTXO count for address %s: %d", kaspaAddress, utxo_count)
 
-    ttl = 8
-    if utxo_count > 100_000:
-        ttl = 3600
-    elif utxo_count > 10_000:
-        ttl = 600
-    elif utxo_count > 1_000:
-        ttl = 20
-
-    response.headers["Cache-Control"] = f"public, max-age={ttl}"
+    response.headers["Cache-Control"] = f"public, max-age={_utxo_count_to_ttl(utxo_count)}"
     return (utxo for utxo in utxos if utxo["address"] == kaspaAddress)
 
 
@@ -144,6 +134,7 @@ async def get_utxos_for_addresses(body: UtxoRequest):
     openapi_extra={"strict_query_params": True},
 )
 async def get_utxo_count_for_address(
+    response: Response,
     kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
 ):
     """
@@ -154,14 +145,25 @@ async def get_utxo_count_for_address(
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
 
-    count = await _get_utxo_count_from_table(kaspaAddress)
-    if count is None:
+    utxo_count = await _get_utxo_count_from_table(kaspaAddress)
+    if utxo_count is None:
         utxos = await get_utxos([kaspaAddress])
-        count = len([u for u in utxos if u["address"] == kaspaAddress])
-    if count > 1_000:
-        _logger.info("High UTXO count for address %s: %d", kaspaAddress, count)
+        utxo_count = len([u for u in utxos if u["address"] == kaspaAddress])
+    if utxo_count > 1_000:
+        _logger.info("High UTXO count for address %s: %d", kaspaAddress, utxo_count)
 
-    return {"count": count}
+    response.headers["Cache-Control"] = f"public, max-age={_utxo_count_to_ttl(utxo_count)}"
+    return {"count": utxo_count}
+
+
+def _utxo_count_to_ttl(count: int) -> int:
+    if count > 100_000:
+        return 3600
+    if count > 10_000:
+        return 600
+    if count > 1_000:
+        return 60
+    return 8
 
 
 async def get_utxos(addresses):
