@@ -44,6 +44,14 @@ class UtxoResponse(BaseModel):
     utxoEntry: UtxoModel
 
 
+class UtxoRequest(BaseModel):
+    addresses: list[str] = [ADDRESS_EXAMPLE]
+
+
+class UtxoCountResponse(BaseModel):
+    count: int
+
+
 @app.get(
     "/addresses/{kaspaAddress}/utxos",
     response_model=List[UtxoResponse],
@@ -57,7 +65,7 @@ async def get_utxos_for_address(
     """
     Lists all open utxo for a given kaspa address.
 
-    Returns HTTP 507 if the address holds more than `SCRIPTS_UTXOS_LIMIT` UTXOs.
+    Returns HTTP 507 if the address holds too many UTXOs.
     """
     try:
         to_script(kaspaAddress)
@@ -85,10 +93,6 @@ async def get_utxos_for_address(
     return (utxo for utxo in utxos if utxo["address"] == kaspaAddress)
 
 
-class UtxoRequest(BaseModel):
-    addresses: list[str] = [ADDRESS_EXAMPLE]
-
-
 @app.post(
     "/addresses/utxos",
     response_model=List[UtxoResponse],
@@ -99,7 +103,7 @@ async def get_utxos_for_addresses(body: UtxoRequest):
     """
     Lists all open utxo for a given list of kaspa addresses.
 
-    Addresses that hold more than `SCRIPTS_UTXOS_LIMIT` UTXOs are silently omitted from the response.
+    Addresses that hold too many UTXOs are silently omitted from the response.
     """
     if body.addresses is None:
         return []
@@ -118,6 +122,31 @@ async def get_utxos_for_addresses(body: UtxoRequest):
         return []
 
     return await get_utxos(allowed)
+
+
+@app.get(
+    "/addresses/{kaspaAddress}/utxos/count",
+    response_model=UtxoCountResponse,
+    tags=["Kaspa addresses"],
+    openapi_extra={"strict_query_params": True},
+)
+async def get_utxo_count_for_address(
+    kaspaAddress: str = Path(description=f"Kaspa address as string e.g. {ADDRESS_EXAMPLE}", regex=REGEX_KASPA_ADDRESS),
+):
+    """
+    Returns the number of open UTXOs for a given kaspa address
+    """
+    try:
+        to_script(kaspaAddress)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
+
+    count = await _get_utxo_count_from_table(kaspaAddress)
+    if count is None:
+        utxos = await get_utxos([kaspaAddress])
+        count = len([u for u in utxos if u["address"] == kaspaAddress])
+
+    return {"count": count}
 
 
 async def get_utxos(addresses):
@@ -139,6 +168,26 @@ async def get_utxos(addresses):
     return utxos["entries"]
 
 
+async def _ensure_table_known(session) -> bool:
+    """Checks and caches whether script_utxo_counts exists. Returns table existence."""
+    global _utxo_count_table_exists
+    if _utxo_count_table_exists is None:
+        result = await session.execute(
+            text(
+                "SELECT EXISTS ("
+                "SELECT FROM information_schema.tables "
+                "WHERE table_schema = 'public' AND table_name = 'script_utxo_counts'"
+                ");"
+            )
+        )
+        _utxo_count_table_exists = result.scalar()
+        if _utxo_count_table_exists:
+            _logger.info("script_utxo_counts helper table detected")
+        else:
+            _logger.info("script_utxo_counts helper table NOT found – UTXO count limiting disabled")
+    return _utxo_count_table_exists
+
+
 async def _get_over_limit_addresses(addresses: list[str]) -> set[str]:
     """
     Returns the subset of *addresses* whose UTXO count exceeds SCRIPTS_UTXOS_LIMIT
@@ -148,24 +197,8 @@ async def _get_over_limit_addresses(addresses: list[str]) -> set[str]:
     if not os.getenv("SQL_URI"):
         return set()
 
-    global _utxo_count_table_exists
     async with async_session() as s:
-        if _utxo_count_table_exists is None:
-            result = await s.execute(
-                text(
-                    "SELECT EXISTS ("
-                    "SELECT FROM information_schema.tables "
-                    "WHERE table_schema = 'public' AND table_name = 'script_utxo_counts'"
-                    ");"
-                )
-            )
-            _utxo_count_table_exists = result.scalar()
-            if _utxo_count_table_exists:
-                _logger.info("script_utxo_counts helper table detected")
-            else:
-                _logger.info("script_utxo_counts helper table NOT found – UTXO count limiting disabled")
-
-        if not _utxo_count_table_exists:
+        if not await _ensure_table_known(s):
             return set()
 
         if USE_SCRIPT_FOR_ADDRESS:
@@ -184,3 +217,30 @@ async def _get_over_limit_addresses(addresses: list[str]) -> set[str]:
                 )
             )
             return set(result.scalars())
+
+
+async def _get_utxo_count_from_table(kaspaAddress: str) -> int | None:
+    """
+    Returns the UTXO count for *kaspaAddress* from the helper table,
+    or None if the table is absent or has no row for the address.
+    """
+    if not os.getenv("SQL_URI"):
+        return None
+
+    async with async_session() as s:
+        if not await _ensure_table_known(s):
+            return None
+
+        if USE_SCRIPT_FOR_ADDRESS:
+            result = await s.execute(
+                select(ScriptUtxoCount.count).where(
+                    ScriptUtxoCount.script_public_key == to_script(kaspaAddress)
+                )
+            )
+        else:
+            result = await s.execute(
+                select(ScriptUtxoCount.count).where(
+                    ScriptUtxoCount.script_public_key_address == kaspaAddress
+                )
+            )
+        return result.scalar()
