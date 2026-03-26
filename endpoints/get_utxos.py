@@ -83,12 +83,16 @@ async def get_utxos_for_address(
 
     utxos = await get_utxos([kaspaAddress])
 
+    utxo_count = len(utxos)
+    if utxo_count > 1_000:
+        _logger.info("High UTXO count for address %s: %d", kaspaAddress, utxo_count)
+
     ttl = 8
-    if len(utxos) > 100_000:
+    if utxo_count > 100_000:
         ttl = 3600
-    elif len(utxos) > 10_000:
+    elif utxo_count > 10_000:
         ttl = 600
-    elif len(utxos) > 1_000:
+    elif utxo_count > 1_000:
         ttl = 20
 
     response.headers["Cache-Control"] = f"public, max-age={ttl}"
@@ -125,7 +129,12 @@ async def get_utxos_for_addresses(body: UtxoRequest):
     if not allowed:
         return []
 
-    return await get_utxos(allowed)
+    utxos = await get_utxos(allowed)
+    for addr in allowed:
+        addr_count = len([u for u in utxos if u["address"] == addr])
+        if addr_count > 1_000:
+            _logger.info("High UTXO count for address %s: %d", addr, addr_count)
+    return utxos
 
 
 @app.get(
@@ -149,6 +158,8 @@ async def get_utxo_count_for_address(
     if count is None:
         utxos = await get_utxos([kaspaAddress])
         count = len([u for u in utxos if u["address"] == kaspaAddress])
+    if count > 1_000:
+        _logger.info("High UTXO count for address %s: %d", kaspaAddress, count)
 
     return {"count": count}
 
