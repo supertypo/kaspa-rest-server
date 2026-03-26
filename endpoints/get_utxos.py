@@ -19,6 +19,7 @@ from models.ScriptUtxoCount import ScriptUtxoCount
 from server import app, kaspad_client
 
 _logger = logging.getLogger(__name__)
+IS_SQL_DB_CONFIGURED = os.getenv("SQL_URI") is not None
 _utxo_count_table_exists: bool | None = None
 
 
@@ -65,7 +66,7 @@ async def get_utxos_for_address(
     """
     Lists all open utxo for a given kaspa address.
 
-    Returns HTTP 507 if the address holds too many UTXOs.
+    Returns HTTP 413 if the address holds too many UTXOs.
     """
     try:
         to_script(kaspaAddress)
@@ -75,7 +76,7 @@ async def get_utxos_for_address(
     over_limit = await _get_over_limit_addresses([kaspaAddress])
     if over_limit:
         raise HTTPException(
-            status_code=507,
+            status_code=413,
             detail=f"Address UTXO count exceeds the limit of {SCRIPTS_UTXOS_LIMIT}",
         )
 
@@ -194,7 +195,7 @@ async def _get_over_limit_addresses(addresses: list[str]) -> set[str]:
     according to the script_utxo_counts table.  Returns an empty set when the table
     does not exist or the primary DB is not configured.
     """
-    if not os.getenv("SQL_URI"):
+    if not IS_SQL_DB_CONFIGURED:
         return set()
 
     async with async_session() as s:
@@ -224,7 +225,7 @@ async def _get_utxo_count_from_table(kaspaAddress: str) -> int | None:
     Returns the UTXO count for *kaspaAddress* from the helper table,
     or None if the table is absent or has no row for the address.
     """
-    if not os.getenv("SQL_URI"):
+    if not IS_SQL_DB_CONFIGURED:
         return None
 
     async with async_session() as s:
