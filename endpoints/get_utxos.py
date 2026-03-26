@@ -248,14 +248,10 @@ async def _get_utxo_count_from_table(kaspaAddress: str) -> int | None:
 
         if USE_SCRIPT_FOR_ADDRESS:
             result = await s.execute(
-                select(ScriptUtxoCount.count).where(
-                    ScriptUtxoCount.script_public_key == to_script(kaspaAddress)
-                )
+                select(ScriptUtxoCount.count).where(ScriptUtxoCount.script_public_key == to_script(kaspaAddress))
             )
         else:
             result = await s.execute(
-                select(ScriptUtxoCount.count).where(
-                    ScriptUtxoCount.script_public_key_address == kaspaAddress
-                )
+                select(ScriptUtxoCount.count).where(ScriptUtxoCount.script_public_key_address == kaspaAddress)
             )
         return result.scalar()
