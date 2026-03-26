@@ -75,6 +75,7 @@ async def get_utxos_for_address(
 
     over_limit = await _get_over_limit_addresses([kaspaAddress])
     if over_limit:
+        _logger.info("UTXO count over limit for address: %s", kaspaAddress)
         raise HTTPException(
             status_code=413,
             detail=f"Address UTXO count exceeds the limit of {SCRIPTS_UTXOS_LIMIT}",
@@ -118,6 +119,8 @@ async def get_utxos_for_addresses(body: UtxoRequest):
             raise HTTPException(status_code=400, detail=f"Invalid address: {kaspaAddress}")
 
     over_limit = await _get_over_limit_addresses(body.addresses)
+    if over_limit:
+        _logger.info("UTXO count over limit for addresses: %s", over_limit)
     allowed = [a for a in body.addresses if a not in over_limit]
     if not allowed:
         return []
