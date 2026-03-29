@@ -43,6 +43,8 @@ class TransactionOutput:
 
     def __post_init__(self):
         self.script_public_key = bytea_to_hex(self.script_public_key)
+        if self.script_public_key_address:
+            self.script_public_key_address = ADDRESS_PREFIX + ":" + self.script_public_key_address
         if self.script_public_key:
             self.script_public_key_type = get_public_key_type(self.script_public_key)
             if not self.script_public_key_address:
