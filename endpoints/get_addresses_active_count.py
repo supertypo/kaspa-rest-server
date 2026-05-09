@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from fastapi import Path
 from pydantic import BaseModel
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -66,9 +66,13 @@ async def get_addresses_active_count_totals(response: Response):
             raise HTTPException(status_code=503, detail="Addresses active total count is not available")
 
         if USE_SCRIPT_FOR_ADDRESS:
-            result = await s.execute(select(func.count()).select_from(TxScriptCount))
+            result = await s.execute(
+                text("SELECT reltuples::bigint FROM pg_class WHERE relname = 'scripts_transactions_count'")
+            )
         else:
-            result = await s.execute(select(func.count()).select_from(TxAddrCount))
+            result = await s.execute(
+                text("SELECT reltuples::bigint FROM pg_class WHERE relname = 'addresses_transactions_count'")
+            )
 
         count = result.scalar_one()
         if count == 0:
