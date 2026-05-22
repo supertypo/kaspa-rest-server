@@ -7,7 +7,7 @@ from typing import List, Optional
 from fastapi import Path, HTTPException, Query
 from kaspa_script_address import to_address
 from pydantic import BaseModel, Field
-from sqlalchemy import exists, text
+from sqlalchemy import exists, func, text
 from sqlalchemy.future import select
 from starlette.responses import Response
 
@@ -143,46 +143,44 @@ async def get_transaction(
     async with async_session_blocks() as session_blocks:
         async with async_session() as session:
             transaction = None
-            if blockHash:
-                block_hashes = [blockHash]
-            else:
-                block_hashes = await session_blocks.execute(
-                    select(BlockTransaction.block_hash).filter(BlockTransaction.transaction_id == transaction_id)
-                )
-                block_hashes = block_hashes.scalars().all()
 
-            if block_hashes:
-                transaction = await get_transaction_from_kaspad(block_hashes, transaction_id, inputs, outputs)
-                if transaction and transaction["inputs"] and inputs:
+            tx = (
+                await session.execute(
+                    select(Transaction, func.array_agg(BlockTransaction.block_hash).label("block_hashes"))
+                    .outerjoin(BlockTransaction, BlockTransaction.transaction_id == Transaction.transaction_id)
+                    .filter(Transaction.transaction_id == transaction_id)
+                    .group_by(Transaction.transaction_id)
+                )
+            ).first()
+
+            if tx:
+                logging.debug(f"Found transaction {transaction_id} in database")
+                transaction = {
+                    "subnetwork_id": tx.Transaction.subnetwork_id,
+                    "transaction_id": tx.Transaction.transaction_id,
+                    "hash": tx.Transaction.hash,
+                    "mass": tx.Transaction.mass,
+                    "payload": tx.Transaction.payload,
+                    "block_hash": [h for h in (tx.block_hashes or []) if h is not None],
+                    "block_time": tx.Transaction.block_time,
+                    "version": tx.Transaction.version or 0,
+                    "inputs": [vars(i) for i in tx.Transaction.inputs] if tx.Transaction.inputs and inputs else None,
+                    "outputs": [vars(o) for o in tx.Transaction.outputs]
+                    if tx.Transaction.outputs and outputs
+                    else None,
+                }
+                if transaction["inputs"]:
                     transaction["inputs"] = (
-                        await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints, False)
+                        await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
                     ).get(transaction_id)
 
-            if not transaction:
-                tx = await session.execute(select(Transaction).filter(Transaction.transaction_id == transaction_id))
-                tx = tx.first()
-
-                if tx:
-                    logging.debug(f"Found transaction {transaction_id} in database")
-                    transaction = {
-                        "subnetwork_id": tx.Transaction.subnetwork_id,
-                        "transaction_id": tx.Transaction.transaction_id,
-                        "hash": tx.Transaction.hash,
-                        "mass": tx.Transaction.mass,
-                        "payload": tx.Transaction.payload,
-                        "block_hash": block_hashes,
-                        "block_time": tx.Transaction.block_time,
-                        "version": tx.Transaction.version or 0,
-                        "inputs": [vars(i) for i in tx.Transaction.inputs]
-                        if tx.Transaction.inputs and inputs
-                        else None,
-                        "outputs": [vars(o) for o in tx.Transaction.outputs]
-                        if tx.Transaction.outputs and outputs
-                        else None,
-                    }
-                    if transaction["inputs"]:
+            elif blockHash:
+                transaction = await get_transaction_from_kaspad([blockHash], transaction_id, inputs, outputs)
+                if transaction:
+                    logging.debug(f"Found transaction {transaction_id} in kaspad")
+                    if transaction["inputs"] and inputs:
                         transaction["inputs"] = (
-                            await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
+                            await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints, False)
                         ).get(transaction_id)
 
             if transaction:
