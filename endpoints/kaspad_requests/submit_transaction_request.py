@@ -1,5 +1,6 @@
 # encoding: utf-8
 import logging
+import re
 from asyncio import wait_for
 from typing import List
 
@@ -11,8 +12,9 @@ from kaspa import (
     TransactionOutput,
     ScriptPublicKey,
     Hash,
+    CovenantBinding,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from starlette.responses import JSONResponse
 
 from kaspad.KaspadRpcClient import kaspad_rpc_client
@@ -31,6 +33,7 @@ class SubmitTxInput(BaseModel):
     signatureScript: str
     sequence: int
     sigOpCount: int
+    computeBudget: int = 0
 
 
 class SubmitTxScriptPublicKey(BaseModel):
@@ -38,9 +41,15 @@ class SubmitTxScriptPublicKey(BaseModel):
     scriptPublicKey: str
 
 
+class SubmitTxCovenantBinding(BaseModel):
+    authorizingInput: int
+    covenantId: str
+
+
 class SubmitTxOutput(BaseModel):
     amount: int
     scriptPublicKey: SubmitTxScriptPublicKey
+    covenant: SubmitTxCovenantBinding | None = None
 
 
 class SubmitTxModel(BaseModel):
@@ -49,6 +58,23 @@ class SubmitTxModel(BaseModel):
     outputs: List[SubmitTxOutput]
     lockTime: int | None = 0
     subnetworkId: str | None
+    gas: int = 0
+    payload: str = ""
+
+    @validator("inputs", "outputs", "gas", "payload", pre=True)
+    def v0_fields(cls, v, values, field):
+        if values.get("version") != 0:
+            return v
+        if field.name == "gas":
+            return 0
+        if field.name == "payload":
+            return v if isinstance(v, str) and re.fullmatch("([0-9a-fA-F]{2})*", v) else ""
+        key = "computeBudget" if field.name == "inputs" else "covenant"
+        return (
+            [{k: x for k, x in e.items() if k != key} if isinstance(e, dict) else e for e in v]
+            if isinstance(v, list)
+            else v
+        )
 
 
 class SubmitTransactionRequest(BaseModel):
@@ -127,17 +153,22 @@ def convert_from_legacy_tx(transaction: SubmitTxModel) -> Transaction | None:
                 i.signatureScript,
                 i.sequence,
                 i.sigOpCount,
+                compute_budget=i.computeBudget,
             )
             for i in transaction.inputs
         ],
         [
-            TransactionOutput(o.amount, ScriptPublicKey(o.scriptPublicKey.version, o.scriptPublicKey.scriptPublicKey))
+            TransactionOutput(
+                o.amount,
+                ScriptPublicKey(o.scriptPublicKey.version, o.scriptPublicKey.scriptPublicKey),
+                covenant_id=CovenantBinding(o.covenant.authorizingInput, o.covenant.covenantId) if o.covenant else None,
+            )
             for o in transaction.outputs
         ],
         transaction.lockTime or 0,
         transaction.subnetworkId or "0000000000000000000000000000000000000000",
-        0,
-        "",
+        transaction.gas,
+        transaction.payload,
         0,
     )
 

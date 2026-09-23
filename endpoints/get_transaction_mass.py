@@ -3,8 +3,8 @@ from pydantic import BaseModel
 
 from endpoints.get_transactions import search_for_transactions, TxSearch
 from endpoints.kaspad_requests.submit_transaction_request import SubmitTxModel
-from helper.mass_calculation_compute import calc_compute_mass
-from helper.mass_calculation_storage import calc_storage_mass
+from helper.mass_calculation_compute import calc_compute_mass, calc_normalized_transient_mass
+from helper.mass_calculation_storage import calc_storage_mass, utxo_plurality
 from server import app
 
 
@@ -14,12 +14,12 @@ class TxMass(BaseModel):
     compute_mass: int
 
 
-def _get_amount_from_tx_output_index(txs, tx_id, output_index: int):
+def _get_tx_output(txs, tx_id, output_index: int):
     for tx in txs:
         if tx["transaction_id"] == tx_id:
             for output in tx["outputs"]:
                 if output["index"] == output_index:
-                    return output["amount"]
+                    return output
 
 
 @app.post(
@@ -49,18 +49,28 @@ async def calculate_transaction_mass(tx: SubmitTxModel):
     if len(txs) != len(set([x.transactionId for x in previous_outpoints])):
         raise HTTPException(status_code=404, detail="Previous outpoint(s) not found in database.")
 
-    tx_input_amounts = [
-        _get_amount_from_tx_output_index(
-            txs,
-            previous_outpoint.transactionId,
-            previous_outpoint.index,
-        )
+    tx_inputs = [
+        _get_tx_output(txs, previous_outpoint.transactionId, previous_outpoint.index)
         for previous_outpoint in previous_outpoints
     ]
 
-    tx_output_amounts = [output.amount for output in tx.outputs]
+    tx_input_cells = [
+        (
+            utxo_plurality(
+                i["script_public_key"] if i["script_public_key"] is not None else "00" * 35, bool(i["covenant_id"])
+            ),
+            i["amount"],
+        )
+        for i in tx_inputs
+    ]
+    tx_output_cells = [
+        (utxo_plurality(o.scriptPublicKey.scriptPublicKey, o.covenant is not None), o.amount) for o in tx.outputs
+    ]
 
-    storage_mass = calc_storage_mass(tx_input_amounts, tx_output_amounts)
+    storage_mass = calc_storage_mass(tx_input_cells, tx_output_cells)
     compute_mass = calc_compute_mass(tx.dict())
+    transient_mass = calc_normalized_transient_mass(tx.dict())
 
-    return TxMass(mass=max(storage_mass, compute_mass), storage_mass=storage_mass, compute_mass=compute_mass)
+    return TxMass(
+        mass=max(storage_mass, compute_mass, transient_mass), storage_mass=storage_mass, compute_mass=compute_mass
+    )

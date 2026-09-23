@@ -3,20 +3,8 @@
 MASS_PER_TX_BYTE = 1
 MASS_PER_SCRIPT_PUB_KEY_BYTE = 10
 MASS_PER_SIG_OP = 1000
-
-MAXIMUM_STANDARD_TRANSACTION_MASS = 100_000
-
-
-def decode_sig_op_count(tx_version: int, encoded: int) -> int:
-    """
-    Decodes a compressed signature operation count.
-    For tx version 0 (mainnet), the value is used directly.
-    For tx version > 0: values 0-100 are direct; 101-255 expand via
-    actual = 100 + (encoded - 100) * 10  (max decoded value: 1650).
-    """
-    if tx_version == 0 or encoded <= 100:
-        return encoded
-    return 100 + (encoded - 100) * 10
+MASS_PER_COMPUTE_BUDGET_UNIT = 100
+NORMALIZED_TRANSIENT_MASS_PER_TX_BYTE = 2
 
 
 def outpoint_size(tx_input_outpoint):
@@ -38,10 +26,12 @@ def tx_output_serialized(tx_output):
     size += 2  # scriptpubkey version
     size += 8  # length of script pub key
     size += len(tx_output["scriptPublicKey"]["scriptPublicKey"]) / 2
+    if tx_output.get("covenant"):
+        size += 34
     return size
 
 
-def tx_input_serialized(tx_input):
+def tx_input_serialized(tx_input, tx_version):
     """
     size for each input
     """
@@ -50,6 +40,8 @@ def tx_input_serialized(tx_input):
     size += 8  # length of signature script
     size += len(tx_input["signatureScript"]) / 2
     size += 8  # sequence
+    if tx_version > 0:
+        size += 2
     return size
 
 
@@ -57,7 +49,7 @@ def tx_serialized_size(tx):
     size = 0
     size += 2  # 2 bytes for tx version
     size += 8  # count of inputs
-    size += sum([tx_input_serialized(x) for x in tx["inputs"]])
+    size += sum([tx_input_serialized(x, tx.get("version", 0)) for x in tx["inputs"]])
     size += 8  # count of outputs
     size += sum([tx_output_serialized(x) for x in tx["outputs"]])
     size += 8  # lock time
@@ -91,8 +83,12 @@ def calc_compute_mass(tx):
     # calc sum
     total_script_public_key_mass = MASS_PER_SCRIPT_PUB_KEY_BYTE * total_script_public_key_sum
 
-    # calc mass for all inputs with sigOpCount
-    total_sigops_mass = MASS_PER_SIG_OP * sum(
-        [decode_sig_op_count(tx.get("version", 0), x["sigOpCount"]) for x in tx["inputs"]]
-    )
-    return int(mass + total_script_public_key_mass + total_sigops_mass)
+    if tx.get("version", 0) > 0:
+        total_script_mass = MASS_PER_COMPUTE_BUDGET_UNIT * sum([x["computeBudget"] for x in tx["inputs"]])
+    else:
+        total_script_mass = MASS_PER_SIG_OP * sum([x["sigOpCount"] for x in tx["inputs"]])
+    return int(mass + total_script_public_key_mass + total_script_mass)
+
+
+def calc_normalized_transient_mass(tx):
+    return int(tx_serialized_size(tx) * NORMALIZED_TRANSIENT_MASS_PER_TX_BYTE)
