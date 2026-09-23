@@ -72,6 +72,7 @@ message RpcTransactionInput {
   uint64 sequence = 3;
   uint32 sigOpCount = 5;
   RpcTransactionInputVerboseData verboseData = 4;
+  uint32 computeBudget = 6;
 }
 
 message RpcScriptPublicKey {
@@ -83,6 +84,12 @@ message RpcTransactionOutput {
   uint64 amount = 1;
   RpcScriptPublicKey scriptPublicKey = 2;
   RpcTransactionOutputVerboseData verboseData = 3;
+  optional RpcCovenantBinding covenant = 4;
+}
+
+message RpcCovenantBinding {
+  uint32 authorizing_input = 1;
+  string covenant_id = 2;
 }
 
 message RpcOutpoint {
