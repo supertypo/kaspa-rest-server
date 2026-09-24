@@ -97,6 +97,11 @@ async def submit_a_new_transaction(
     body: SubmitTransactionRequest,
     replaceByFee: bool = Query(description="Replace an existing transaction in the mempool", default=False),
 ):
+    """
+    Submit a signed transaction to the Kaspa network and return its transaction id.
+    Both v0 and v1 (Toccata) transactions are supported. For v1, inputs use computeBudget (sigOpCount must be 0)
+    and outputs can include a covenant binding.
+    """
     rpc_client = await kaspad_rpc_client()
     if replaceByFee:
         if rpc_client:

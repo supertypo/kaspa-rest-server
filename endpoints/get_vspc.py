@@ -26,8 +26,7 @@ class VscpResponse(BaseModel):
 @app.get("/info/get-vscp-from-block", response_model=VscpResponse, tags=["Kaspa network info"])
 async def get_virtual_selected_parent_chain_from_block(startHash: str, includeAcceptedTransactionIds: bool = True):
     """
-    GetVirtualSelectedParentChainFromBlockRequestMessage requests the virtual selected parent chain from
-    some startHash to this kaspad's current virtual.
+    Returns the virtual selected parent chain from some startHash to the current virtual.
     """
     rpc_client = await kaspad_rpc_client()
     request = {"startHash": startHash, "includeAcceptedTransactionIds": includeAcceptedTransactionIds}

@@ -56,7 +56,7 @@ async def get_hashrate(stringOnly: bool = False):
 @sql_db_only
 async def get_max_hashrate():
     """
-    Returns the current hashrate for Kaspa network in TH/s.
+    Returns the highest hashrate observed for Kaspa network in TH/s, and the block it was calculated from.
     """
     maxhash_last_value = json.loads((await KeyValueStore.get("maxhash_last_value")) or "{}")
     maxhash_last_bluescore = int((await KeyValueStore.get("maxhash_last_bluescore")) or 0)
