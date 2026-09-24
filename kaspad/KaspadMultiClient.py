@@ -15,6 +15,7 @@ class KaspadMultiClient(object):
         for k in self.kaspads:
             if k.is_utxo_indexed and k.is_synced:
                 return k
+        raise KaspadCommunicationError("No synced kaspad available")
 
     async def initialize_all(self):
         tasks = [asyncio.create_task(k.ping()) for k in self.kaspads]
