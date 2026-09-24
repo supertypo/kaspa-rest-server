@@ -34,7 +34,7 @@ async def get_virtual_selected_parent_chain_from_block(startHash: str, includeAc
     if rpc_client:
         return await wait_for(rpc_client.get_virtual_chain_from_block(request), 60)
     else:
-        resp = await kaspad_client.request("getVirtualChainFromBlockRequest", request)
+        resp = await kaspad_client.request("getVirtualChainFromBlockRequest", request, timeout=60)
         if resp.get("error"):
             raise HTTPException(500, resp["error"])
         return resp["getVirtualChainFromBlockResponse"]

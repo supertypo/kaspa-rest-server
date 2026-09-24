@@ -28,7 +28,7 @@ class KaspadClient(object):
             self.is_synced = False
             return False
 
-    async def request(self, command, params=None, timeout=5):
+    async def request(self, command, params=None, timeout=10):
         with KaspadThread(self.kaspad_host, self.kaspad_port) as t:
             return await t.request(command, params, wait_for_response=True, timeout=timeout)
 
