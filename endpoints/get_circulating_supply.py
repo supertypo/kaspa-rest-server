@@ -38,7 +38,7 @@ async def get_coinsupply():
 @app.get("/info/coinsupply/circulating", tags=["Kaspa network info"], response_class=PlainTextResponse)
 async def get_circulating_coins(in_billion: bool = False):
     """
-    Get circulating amount of $KAS token as numerical value
+    Get circulating amount of $KAS coin as numerical value
     """
     coin_supply = await get_coinsupply()
     coins = str(float(coin_supply["circulatingSupply"]) / 100000000)
@@ -51,6 +51,6 @@ async def get_circulating_coins(in_billion: bool = False):
 @app.get("/info/coinsupply/total", tags=["Kaspa network info"], response_class=PlainTextResponse)
 async def get_total_coins(in_billion: bool = False):
     """
-    Get total amount of $KAS token as numerical value
+    Get total amount of $KAS coin as numerical value
     """
     return await get_circulating_coins(in_billion)

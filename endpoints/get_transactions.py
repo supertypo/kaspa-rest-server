@@ -142,9 +142,9 @@ async def get_transaction(
     """
     Get details for a given transaction id
     """
+    transaction = None
+    acceptance = None
     async with async_session() as session:
-        transaction = None
-
         tx = await session.execute(select(Transaction).filter(Transaction.transaction_id == transaction_id))
         tx = tx.first()
         if tx:
@@ -161,24 +161,9 @@ async def get_transaction(
                 "inputs": [vars(i) for i in tx.Transaction.inputs] if tx.Transaction.inputs and inputs else None,
                 "outputs": [vars(o) for o in tx.Transaction.outputs] if tx.Transaction.outputs and outputs else None,
             }
-            if transaction["inputs"]:
-                transaction["inputs"] = (
-                    await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
-                ).get(transaction_id)
 
-        elif blockHash:
-            transaction = await get_transaction_from_kaspad([blockHash], transaction_id, inputs, outputs)
-            if transaction:
-                logging.debug(f"Found transaction {transaction_id} in kaspad")
-                if transaction["inputs"] and inputs:
-                    transaction["inputs"] = (
-                        await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints, False)
-                    ).get(transaction_id)
-
-        if transaction:
-            # transactions_acceptances and blocks are ingested by independent threads, so the Block
-            # row may not be present yet for an accepting_block_hash; fall back to kaspad in that case.
-            row = (
+        if tx or blockHash:
+            acceptance = (
                 await session.execute(
                     select(
                         TransactionAcceptance.transaction_id,
@@ -190,21 +175,40 @@ async def get_transaction(
                     .filter(TransactionAcceptance.transaction_id == transaction_id)
                 )
             ).one_or_none()
-            accepted_transaction_id, accepting_block_hash, accepting_block_blue_score, accepting_block_time = (
-                row if row else (None, None, None, None)
-            )
-            transaction["is_accepted"] = accepted_transaction_id is not None
 
-            if accepting_block_hash:
-                transaction["accepting_block_hash"] = accepting_block_hash
-                transaction["accepting_block_blue_score"] = accepting_block_blue_score
-                transaction["accepting_block_time"] = accepting_block_time
-                if not accepting_block_blue_score:
-                    accepting_block = await get_block_from_kaspad(accepting_block_hash, False, False)
-                    accepting_block_header = accepting_block.get("header") if accepting_block else None
-                    if accepting_block_header:
-                        transaction["accepting_block_blue_score"] = accepting_block_header.get("blueScore")
-                        transaction["accepting_block_time"] = accepting_block_header.get("timestamp")
+    if tx:
+        if transaction["inputs"]:
+            transaction["inputs"] = (
+                await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints)
+            ).get(transaction_id)
+
+    elif blockHash:
+        transaction = await get_transaction_from_kaspad([blockHash], transaction_id, inputs, outputs)
+        if transaction:
+            logging.debug(f"Found transaction {transaction_id} in kaspad")
+            if transaction["inputs"] and inputs:
+                transaction["inputs"] = (
+                    await resolve_inputs_from_db(transaction["inputs"], resolve_previous_outpoints, False)
+                ).get(transaction_id)
+
+    if transaction:
+        accepted_transaction_id, accepting_block_hash, accepting_block_blue_score, accepting_block_time = (
+            acceptance if acceptance else (None, None, None, None)
+        )
+        transaction["is_accepted"] = accepted_transaction_id is not None
+
+        if accepting_block_hash:
+            transaction["accepting_block_hash"] = accepting_block_hash
+            transaction["accepting_block_blue_score"] = accepting_block_blue_score
+            transaction["accepting_block_time"] = accepting_block_time
+            # transactions_acceptances and blocks are ingested by independent threads, so the Block
+            # row may not be present yet for an accepting_block_hash; fall back to kaspad in that case.
+            if not accepting_block_blue_score:
+                accepting_block = await get_block_from_kaspad(accepting_block_hash, False, False)
+                accepting_block_header = accepting_block.get("header") if accepting_block else None
+                if accepting_block_header:
+                    transaction["accepting_block_blue_score"] = accepting_block_header.get("blueScore")
+                    transaction["accepting_block_time"] = accepting_block_header.get("timestamp")
 
     if transaction:
         add_cache_control(transaction.get("accepting_block_blue_score"), transaction.get("block_time"), response)

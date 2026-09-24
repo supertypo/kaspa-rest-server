@@ -30,7 +30,7 @@ def _get_tx_output(txs, tx_id, output_index: int):
 )
 async def calculate_transaction_mass(tx: SubmitTxModel):
     """
-    This function calculates and returns the mass of a transaction, which is essential for determining the minimum fee. The mass calculation takes into account the storage mass as defined in KIP-0009.
+    This function calculates and returns the mass of a transaction, which is essential for determining the minimum fee. The returned mass is the largest of the compute mass, the storage mass as defined in KIP-0009 and the normalized transient mass, for both v0 and v1 transactions.
 
     Note: Be aware that if the transaction has a very low output amount or a high number of outputs, the mass can become significantly large.
     """
