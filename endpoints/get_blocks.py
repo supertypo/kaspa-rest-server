@@ -197,7 +197,7 @@ async def get_blocks(
         except Exception:
             return {"blockHashes": [], "blocks": []}
     else:
-        resp = await kaspad_client.request("getBlocksRequest", request)
+        resp = await kaspad_client.request("getBlocksRequest", request, timeout=60)
         return resp["getBlocksResponse"]
 
 

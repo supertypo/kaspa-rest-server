@@ -23,7 +23,7 @@ class KaspadMultiClient(object):
         for t in tasks:
             await t
 
-    async def request(self, command, params=None, timeout=5):
+    async def request(self, command, params=None, timeout=10):
         try:
             return await self.__get_kaspad().request(command, params, timeout=timeout)
         except KaspadCommunicationError:
