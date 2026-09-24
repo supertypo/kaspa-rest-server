@@ -21,6 +21,7 @@ from helper.StrictRoute import StrictRoute
 from helper.LimitUploadSize import LimitUploadSize
 from kaspad.KaspadMultiClient import KaspadMultiClient
 from kaspad.KaspadRpcClient import kaspad_rpc_client
+from kaspad.KaspadThread import KaspadCommunicationError
 
 fastapi.logger.logger.setLevel(logging.WARNING)
 
@@ -133,6 +134,14 @@ if not kaspad_hosts and not KASPAD_WRPC_URL:
     raise Exception("Please set KASPAD_WRPC_URL or KASPAD_HOST_1 environment variable.")
 
 kaspad_client = KaspadMultiClient(kaspad_hosts)
+
+
+@app.exception_handler(KaspadCommunicationError)
+async def kaspad_communication_exception_handler(request: Request, exc: KaspadCommunicationError):
+    _logger.warning("Kaspad communication failed: %s", exc)
+    return JSONResponse(
+        status_code=503, content={"detail": "Kaspad unavailable"}, headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.exception_handler(Exception)

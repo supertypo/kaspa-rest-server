@@ -61,8 +61,8 @@ async def get_full_transactions_for_address(
     resolve_previous_outpoints: PreviousOutpointLookupMode = Query(default="no", description=DESC_RESOLVE_PARAM),
 ):
     """
-    Get all transactions for a given address from database.
-    And then get their related full transaction data
+    Get full transaction data for the transactions of a given address, newest first.
+    Use limit and offset for paging.
     """
     try:
         script = to_script(kaspa_address)
@@ -144,8 +144,8 @@ async def get_full_transactions_for_address_page(
     acceptance: Optional[AcceptanceMode] = Query(default=None),
 ):
     """
-    Get all transactions for a given address from database.
-    And then get their related full transaction data
+    Get full transaction data for the transactions of a given address, newest first.
+    Use limit and before/after for paging.
     """
     try:
         script = to_script(kaspa_address)
